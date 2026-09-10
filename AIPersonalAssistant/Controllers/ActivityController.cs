@@ -16,22 +16,40 @@ public class ActivityController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetActivities([FromQuery] int limit = 20)
+    public async Task<IActionResult> GetActivities([FromQuery] int page = 1, [FromQuery] int pageSize = 5)
     {
-        var activities = await _dbContext.ActivityLogs.Take(limit)
-        .Select(a => new ActivityResponseDto
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 5;
+        if (pageSize > 100) pageSize = 100;
+
+        var totalCount = await _dbContext.ActivityLogs.CountAsync();
+
+        var items = await _dbContext.ActivityLogs
+            .OrderByDescending(a => a.CreateAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(a => new ActivityResponseDto
+            {
+                Id = a.Id,
+                Title = a.Title,
+                Description = a.Description,
+                Category = a.Category,
+                CreatedAt = a.CreateAt,
+                IsReviewed = a.IsCompleted,
+                RemindAt = a.ReminderTime,
+                IsReminder = a.IsReminder
+            })
+            .ToListAsync();
+
+        var result = new PagedResultDto<ActivityResponseDto>
         {
-            Id = a.Id,
-            Title = a.Title,
-            Description = a.Description,
-            Category = a.Category,
-            CreatedAt = a.CreateAt,
-            IsReviewed = a.IsCompleted,
-            RemindAt = a.ReminderTime,
-            IsReminder = a.IsReminder
-        })
-        .ToListAsync();
-        return Ok(activities);
+            Items = items,
+            TotalCount = totalCount,
+            Page = page,
+            PageSize = pageSize
+        };
+
+        return Ok(result);
     }
 
     [HttpGet("{id}")]
