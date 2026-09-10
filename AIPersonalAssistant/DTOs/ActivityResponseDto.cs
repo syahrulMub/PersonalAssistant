@@ -9,5 +9,5 @@ public class ActivityResponseDto
     public DateTime CreatedAt { get; set; }
     public bool IsReviewed { get; set; }
     public DateTime? RemindAt { get; set; }
-    public bool IsReminderSent { get; set; }
+    public bool IsReminder { get; set; }
 }

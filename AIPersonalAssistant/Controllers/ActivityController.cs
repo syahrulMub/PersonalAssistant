@@ -28,7 +28,7 @@ public class ActivityController : ControllerBase
             CreatedAt = a.CreateAt,
             IsReviewed = a.IsCompleted,
             RemindAt = a.ReminderTime,
-            IsReminderSent = a.IsReminder
+            IsReminder = a.IsReminder
         })
         .ToListAsync();
         return Ok(activities);
@@ -52,7 +52,7 @@ public class ActivityController : ControllerBase
             CreatedAt = activity.CreateAt,
             IsReviewed = activity.IsCompleted,
             RemindAt = activity.ReminderTime,
-            IsReminderSent = activity.IsReminder
+            IsReminder = activity.IsReminder
         };
 
         return Ok(activityDto);
@@ -71,7 +71,7 @@ public class ActivityController : ControllerBase
             Title = createActivityDto.Title,
             Description = createActivityDto.Description,
             Category = createActivityDto.Category,
-            IsReminder = createActivityDto.RemindAt.HasValue,
+            IsReminder = createActivityDto.IsReminder,
             ReminderTime = createActivityDto.RemindAt ?? DateTime.MinValue,
             CreateAt = DateTime.UtcNow,
             IsCompleted = false
@@ -89,7 +89,7 @@ public class ActivityController : ControllerBase
             CreatedAt = activity.CreateAt,
             IsReviewed = activity.IsCompleted,
             RemindAt = activity.ReminderTime,
-            IsReminderSent = activity.IsReminder
+            IsReminder = activity.IsReminder
         };
 
         return CreatedAtAction(nameof(GetActivity), new { id = activity.Id }, activityResponseDto);

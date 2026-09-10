@@ -11,7 +11,7 @@ public class CreateActivityDto
     [Required(ErrorMessage = "Description required")]
     [StringLength(1000, ErrorMessage = "Description maximum 1000 characters")]
     public string Description { get; set; } = string.Empty;
-
+    public bool IsReminder { get; set; } = false;
     public string Category { get; set; } = "General";
     public DateTime? RemindAt { get; set; }
 }

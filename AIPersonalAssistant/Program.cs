@@ -2,6 +2,7 @@ using AIPersonalAssistant.Configurations;
 using AIPersonalAssistant.Data;
 using AIPersonalAssistant.EmailServices;
 using Microsoft.EntityFrameworkCore;
+using AIPersonalAssistant.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -23,6 +24,9 @@ builder.Services.AddSwaggerGen(options =>
 //email configuration
 builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("EmailSettings"));
 builder.Services.AddScoped<IEmailSevice, EmailService>();
+
+//service
+builder.Services.AddHostedService<BackgroundReminderService>();
 
 builder.Services.AddCors(options =>
 {
