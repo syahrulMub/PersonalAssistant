@@ -6,7 +6,7 @@ COPY AIPersonalAssistant.csproj ./
 RUN dotnet restore AIPersonalAssistant.csproj
 
 COPY . .
-RUN dotnet publish AIPersonalAssistant.csproj -c Release -o /app/publish /p:UseAppHost=false
+RUN dotnet publish AIPersonalAssistant.csproj -c Release -o /app/publish /p:UseAppHost=false /p:BuildingSpa=false
 
 # Stage 2: Runtime Final (Gunakan ASPNET Runtime)
 FROM mcr.microsoft.com/dotnet/aspnet:7.0 AS final
