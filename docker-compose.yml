@@ -3,7 +3,7 @@ version: "3.8"
 services:
   backend:
     build:
-      context: .
+      context: ./AIPersonalAssistant
       dockerfile: Dockerfile
     container_name: mindecho-backend
     restart: unless-stopped
@@ -16,7 +16,7 @@ services:
 
   frontend:
     build:
-      context: ./ClientApp
+      context: ./AIPersonalAssistant/ClientApp
       dockerfile: Dockerfile
     container_name: mindecho-frontend
     restart: unless-stopped
