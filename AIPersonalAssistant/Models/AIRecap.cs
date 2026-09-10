@@ -1,7 +1,10 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace AIPersonalAssistant.Models;
 
 public class AIRecap
 {
+    [Key]
     public int Id { get; set; }
     public DateTime CreatedAt { get; set; }
     public string SummaryText { get; set; }

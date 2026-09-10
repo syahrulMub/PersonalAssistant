@@ -8,9 +8,9 @@ public class CreateActivityDto
     [StringLength(150, ErrorMessage = "Title maximum 150 characters")]
     public string Title { get; set; } = string.Empty;
 
-    [Required(ErrorMessage = "Content required")]
-    [StringLength(1000, ErrorMessage = "Content maximum 1000 characters")]
-    public string Content { get; set; } = string.Empty;
+    [Required(ErrorMessage = "Description required")]
+    [StringLength(1000, ErrorMessage = "Description maximum 1000 characters")]
+    public string Description { get; set; } = string.Empty;
 
     public string Category { get; set; } = "General";
     public DateTime? RemindAt { get; set; }

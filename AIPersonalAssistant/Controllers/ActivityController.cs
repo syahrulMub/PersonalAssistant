@@ -69,7 +69,7 @@ public class ActivityController : ControllerBase
         var activity = new Models.ActivityLogs
         {
             Title = createActivityDto.Title,
-            Description = createActivityDto.Content,
+            Description = createActivityDto.Description,
             Category = createActivityDto.Category,
             IsReminder = createActivityDto.RemindAt.HasValue,
             ReminderTime = createActivityDto.RemindAt ?? DateTime.MinValue,
