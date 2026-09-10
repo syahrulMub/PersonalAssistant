@@ -10,6 +10,7 @@ services:
     volumes:
       # Data SQLite tersimpan aman di host server
       - ./data:/app/data
+      - ./PersonalAssistant.db:/app/PersonalAssistant.db
     environment:
       - ConnectionStrings__DefaultConnection=Data Source=/app/data/mindecho.db
       - ASPNETCORE_ENVIRONMENT=Production
