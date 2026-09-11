@@ -46,7 +46,8 @@ builder.Services.AddHangfire(configuration => configuration
 
 builder.Services.AddHangfireServer();
 
-builder.Services.AddScoped<AIGeminiService>();
+builder.Services.AddScoped<AiRecapService>();
+builder.Services.AddScoped<SchedulerMethod>();
 
 builder.Services.AddCors(options =>
 {
@@ -74,10 +75,19 @@ app.UseHangfireDashboard("/hangfire", new DashboardOptions
     Authorization = new[] { new HangfireDashboardNoAuthFilter() }
 });
 
-RecurringJob.AddOrUpdate<AIGeminiService>(
-    "daily-ai-summary",
-    job => job.GenerateDailySummaryAsync(),
+RecurringJob.AddOrUpdate<SchedulerMethod>(
+    "daily-ai-night-summary",
+    job => job.GenerateNightSummaryAsync(),
     "0 21 * * *",
+    new RecurringJobOptions
+    {
+        TimeZone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Jakarta")
+    });
+
+RecurringJob.AddOrUpdate<SchedulerMethod>(
+    "daily-ai-mornig-summary",
+    job => job.GenerateMorningSummaryAsync(),
+    "0 8 * * *",
     new RecurringJobOptions
     {
         TimeZone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Jakarta")

@@ -234,5 +234,4 @@ _Pvt_Extensions
 
 appsettings.Development.json
 appsettings.json
-Dockerfile
-docker-compose.yml
+
