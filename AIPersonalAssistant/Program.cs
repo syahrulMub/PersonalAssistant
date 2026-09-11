@@ -6,6 +6,7 @@ using AIPersonalAssistant.Services;
 using AIPersonalAssistant.Middleware;
 using Hangfire;
 using Hangfire.Storage.SQLite;
+using AIPersonalAssistant;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -68,7 +69,10 @@ using (var scope = app.Services.CreateScope())
 }
 
 //hangfire dashboard
-app.UseHangfireDashboard();
+app.UseHangfireDashboard("hangfire", new DashboardOptions
+{
+    Authorization = new[] { new HangfireDashboardNoAuthFilter() }
+});
 
 RecurringJob.AddOrUpdate<AIGeminiService>(
     "daily-ai-summary",
