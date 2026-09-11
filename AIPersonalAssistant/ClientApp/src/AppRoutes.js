@@ -2,6 +2,7 @@ import { Counter } from "./components/Counter";
 import { FetchData } from "./components/FetchData";
 import { Home } from "./components/Home";
 import { Activity } from "./components/Activity";
+import { ApiLogTracker } from "./components/ApiLogTracker";
 
 const AppRoutes = [
   {
@@ -19,6 +20,10 @@ const AppRoutes = [
   {
     path: "/activity",
     element: <Activity />,
+  },
+  {
+    path: "/logs",
+    element: <ApiLogTracker />,
   },
 ];
 

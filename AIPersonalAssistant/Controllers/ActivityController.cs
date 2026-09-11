@@ -10,121 +10,177 @@ namespace AIPersonalAssistant.Controllers;
 public class ActivityController : ControllerBase
 {
     private readonly AppDbContext _dbContext;
-    public ActivityController(AppDbContext dbContext)
+    private readonly ILogger<ActivityController> _logger;
+
+    public ActivityController(AppDbContext dbContext, ILogger<ActivityController> logger)
     {
         _dbContext = dbContext;
+        _logger = logger;
     }
 
     [HttpGet]
     public async Task<IActionResult> GetActivities([FromQuery] int page = 1, [FromQuery] int pageSize = 5)
     {
-        if (page < 1) page = 1;
-        if (pageSize < 1) pageSize = 5;
-        if (pageSize > 100) pageSize = 100;
-
-        var totalCount = await _dbContext.ActivityLogs.CountAsync();
-
-        var items = await _dbContext.ActivityLogs
-            .OrderByDescending(a => a.CreateAt)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(a => new ActivityResponseDto
-            {
-                Id = a.Id,
-                Title = a.Title,
-                Description = a.Description,
-                Category = a.Category,
-                CreatedAt = a.CreateAt,
-                IsReviewed = a.IsCompleted,
-                RemindAt = a.ReminderTime,
-                IsReminder = a.IsReminder
-            })
-            .ToListAsync();
-
-        var result = new PagedResultDto<ActivityResponseDto>
+        try
         {
-            Items = items,
-            TotalCount = totalCount,
-            Page = page,
-            PageSize = pageSize
-        };
+            _logger.LogInformation("ActivityController.GetActivities called. page={Page}, pageSize={PageSize}", page, pageSize);
 
-        return Ok(result);
+            if (page < 1) page = 1;
+            if (pageSize < 1) pageSize = 5;
+            if (pageSize > 100) pageSize = 100;
+
+            var totalCount = await _dbContext.ActivityLogs.CountAsync();
+
+            var items = await _dbContext.ActivityLogs
+                .OrderByDescending(a => a.CreateAt)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(a => new ActivityResponseDto
+                {
+                    Id = a.Id,
+                    Title = a.Title,
+                    Description = a.Description,
+                    Category = a.Category,
+                    CreatedAt = a.CreateAt,
+                    IsReviewed = a.IsCompleted,
+                    RemindAt = a.ReminderTime,
+                    IsReminder = a.IsReminder
+                })
+                .ToListAsync();
+
+            var result = new PagedResultDto<ActivityResponseDto>
+            {
+                Items = items,
+                TotalCount = totalCount,
+                Page = page,
+                PageSize = pageSize
+            };
+
+            _logger.LogInformation("ActivityController.GetActivities completed. Returned {Count} items.", items.Count);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "ActivityController.GetActivities failed.");
+            return StatusCode(500, "Error retrieving activities.");
+        }
     }
 
     [HttpGet("{id}")]
     public async Task<IActionResult> GetActivity(int id)
     {
-        var activity = await _dbContext.ActivityLogs.FindAsync(id);
-        if (activity == null)
+        try
         {
-            return NotFound();
+            _logger.LogInformation("ActivityController.GetActivity called. id={Id}", id);
+
+            var activity = await _dbContext.ActivityLogs.FindAsync(id);
+            if (activity == null)
+            {
+                _logger.LogWarning("ActivityController.GetActivity not found. id={Id}", id);
+                return NotFound();
+            }
+
+            var activityDto = new ActivityResponseDto
+            {
+                Id = activity.Id,
+                Title = activity.Title,
+                Description = activity.Description,
+                Category = activity.Category,
+                CreatedAt = activity.CreateAt,
+                IsReviewed = activity.IsCompleted,
+                RemindAt = activity.ReminderTime,
+                IsReminder = activity.IsReminder
+            };
+
+            _logger.LogInformation("ActivityController.GetActivity completed. id={Id}", id);
+            return Ok(activityDto);
         }
-
-        var activityDto = new ActivityResponseDto
+        catch (Exception ex)
         {
-            Id = activity.Id,
-            Title = activity.Title,
-            Description = activity.Description,
-            Category = activity.Category,
-            CreatedAt = activity.CreateAt,
-            IsReviewed = activity.IsCompleted,
-            RemindAt = activity.ReminderTime,
-            IsReminder = activity.IsReminder
-        };
-
-        return Ok(activityDto);
+            _logger.LogError(ex, "ActivityController.GetActivity failed. id={Id}", id);
+            return StatusCode(500, "Error retrieving activity.");
+        }
     }
 
     [HttpPost]
-    public async Task<IActionResult> CreateActivity([FromBody] CreateActivityDto createActivityDto)
+    public async Task<IActionResult> CreateActivity([FromBody] CreateActivityDto? createActivityDto)
     {
-        if (!ModelState.IsValid)
+        try
         {
-            return BadRequest(ModelState);
+            if (createActivityDto == null)
+            {
+                _logger.LogWarning("ActivityController.CreateActivity received null payload.");
+                return BadRequest("Activity payload is required.");
+            }
+
+            _logger.LogInformation("ActivityController.CreateActivity called. Title={Title}", createActivityDto.Title);
+
+            if (!ModelState.IsValid)
+            {
+                _logger.LogWarning("ActivityController.CreateActivity validation failed.");
+                return BadRequest(ModelState);
+            }
+
+            var activity = new Models.ActivityLogs
+            {
+                Title = createActivityDto.Title,
+                Description = createActivityDto.Description,
+                Category = createActivityDto.Category,
+                IsReminder = createActivityDto.IsReminder,
+                ReminderTime = createActivityDto.RemindAt ?? DateTime.MinValue,
+                CreateAt = DateTime.UtcNow,
+                IsCompleted = false
+            };
+
+            _dbContext.ActivityLogs.Add(activity);
+            await _dbContext.SaveChangesAsync();
+
+            var activityResponseDto = new ActivityResponseDto
+            {
+                Id = activity.Id,
+                Title = activity.Title,
+                Description = activity.Description,
+                Category = activity.Category,
+                CreatedAt = activity.CreateAt,
+                IsReviewed = activity.IsCompleted,
+                RemindAt = activity.ReminderTime,
+                IsReminder = activity.IsReminder
+            };
+
+            _logger.LogInformation("ActivityController.CreateActivity completed. id={Id}", activity.Id);
+            return CreatedAtAction(nameof(GetActivity), new { id = activity.Id }, activityResponseDto);
         }
-
-        var activity = new Models.ActivityLogs
+        catch (Exception ex)
         {
-            Title = createActivityDto.Title,
-            Description = createActivityDto.Description,
-            Category = createActivityDto.Category,
-            IsReminder = createActivityDto.IsReminder,
-            ReminderTime = createActivityDto.RemindAt ?? DateTime.MinValue,
-            CreateAt = DateTime.UtcNow,
-            IsCompleted = false
-        };
-
-        _dbContext.ActivityLogs.Add(activity);
-        await _dbContext.SaveChangesAsync();
-
-        var activityResponseDto = new ActivityResponseDto
-        {
-            Id = activity.Id,
-            Title = activity.Title,
-            Description = activity.Description,
-            Category = activity.Category,
-            CreatedAt = activity.CreateAt,
-            IsReviewed = activity.IsCompleted,
-            RemindAt = activity.ReminderTime,
-            IsReminder = activity.IsReminder
-        };
-
-        return CreatedAtAction(nameof(GetActivity), new { id = activity.Id }, activityResponseDto);
+            _logger.LogError(ex, "ActivityController.CreateActivity failed.");
+            return StatusCode(500, "Error creating activity.");
+        }
     }
 
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteActivity(int id)
     {
-        var activity = await _dbContext.ActivityLogs.FindAsync(id);
-        if (activity == null)
+        try
         {
-            return NotFound();
+            _logger.LogInformation("ActivityController.DeleteActivity called. id={Id}", id);
+
+            var activity = await _dbContext.ActivityLogs.FindAsync(id);
+            if (activity == null)
+            {
+                _logger.LogWarning("ActivityController.DeleteActivity not found. id={Id}", id);
+                return NotFound();
+            }
+
+            _dbContext.ActivityLogs.Remove(activity);
+            await _dbContext.SaveChangesAsync();
+
+            _logger.LogInformation("ActivityController.DeleteActivity completed. id={Id}", id);
+            return NoContent();
         }
-
-        _dbContext.ActivityLogs.Remove(activity);
-        await _dbContext.SaveChangesAsync();
-
-        return NoContent();
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "ActivityController.DeleteActivity failed. id={Id}", id);
+            return StatusCode(500, "Error deleting activity.");
+        }
     }
 }

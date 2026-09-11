@@ -3,6 +3,7 @@ using AIPersonalAssistant.Data;
 using AIPersonalAssistant.EmailServices;
 using Microsoft.EntityFrameworkCore;
 using AIPersonalAssistant.Services;
+using AIPersonalAssistant.Middleware;
 using Hangfire;
 using Hangfire.Storage.SQLite;
 
@@ -22,6 +23,8 @@ builder.Services.AddSwaggerGen(options =>
         Version = "v1"
     });
 });
+
+builder.Services.AddSingleton<ApiLogService>();
 
 //email configuration
 builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("EmailSettings"));
@@ -94,6 +97,8 @@ else
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseRouting();
+
+app.UseMiddleware<ApiRequestLoggingMiddleware>();
 
 app.UseCors("AllowAll");
 

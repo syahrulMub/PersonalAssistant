@@ -66,6 +66,11 @@ export class NavMenu extends Component {
                   Activity
                 </NavLink>
               </NavItem>
+              <NavItem>
+                <NavLink tag={Link} className="text-dark" to="/logs">
+                  API Logs
+                </NavLink>
+              </NavItem>
             </ul>
           </Collapse>
         </Navbar>
