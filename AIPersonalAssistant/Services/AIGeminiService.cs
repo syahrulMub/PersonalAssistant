@@ -11,16 +11,20 @@ namespace AIPersonalAssistant.Services;
 public class AIGeminiService
 {
     private readonly HttpClient _httpClient;
-    private readonly string _apiKey;
+    private readonly string? _apiKey;
     private readonly AppDbContext _dbContext;
+    private readonly ILogger<AIGeminiService> _logger;
     private readonly IEmailSevice _emailService;
+    private readonly ApiLogService _apiLogService;
 
-    public AIGeminiService(HttpClient httpClient, IConfiguration configuration, AppDbContext dbContext, IEmailSevice emailService)
+    public AIGeminiService(HttpClient httpClient, IConfiguration configuration, AppDbContext dbContext, ILogger<AIGeminiService> logger, IEmailSevice emailService, ApiLogService apiLogService)
     {
         _httpClient = httpClient;
         _apiKey = configuration["Gemini:ApiKey"];
         _dbContext = dbContext;
+        _logger = logger;
         _emailService = emailService;
+        _apiLogService = apiLogService;
     }
 
     public async Task GenerateDailySummaryAsync()
@@ -43,7 +47,7 @@ public class AIGeminiService
         //send email
         string subject = "Daily Summary from AI Assistant";
         string body = BuildDailySummaryHtml(dailySummary.SummaryText, dailySummary.PositiveAffirmations, dailySummary.ActionableInsights);
-        await _emailService.SendEmailAsync(subject, body, null);
+        await _emailService.SendEmailAsync(subject, body, string.Empty);
 
     }
     public async Task<DailySummaryAiDto> GenerateResponseSummaryAsync()
@@ -71,9 +75,11 @@ public class AIGeminiService
 
         var rawResponse = await GenerateContentAsync(prompt);
         var cleanJson = rawResponse.Replace("```json", "").Replace("```", "").Trim();
-
+        _logger.LogInformation("Generated JSON: {Json}", cleanJson);
+        _apiLogService.LogThirdParty("Gemini", "generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent", "POST", 200, "Gemini response parsed successfully.", null, cleanJson, "AIGeminiService", "GenerateResponseSummaryAsync");
         var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-        return JsonSerializer.Deserialize<DailySummaryAiDto>(cleanJson, options);
+        var result = JsonSerializer.Deserialize<DailySummaryAiDto>(cleanJson, options);
+        return result ?? new DailySummaryAiDto();
     }
     public async Task<string> GenerateContentAsync(string prompt)
     {
@@ -108,6 +114,8 @@ public class AIGeminiService
         var jsonPayload = JsonSerializer.Serialize(payload);
         HttpResponseMessage? response = null;
 
+        _apiLogService.LogThirdParty("Gemini", url, "POST", null, "Gemini request started.", jsonPayload, null, "AIGeminiService", "GenerateContentAsync");
+
         for (int i = 0; i < 5; i++)
         {
             var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
@@ -127,10 +135,14 @@ public class AIGeminiService
                 ? await response.Content.ReadAsStringAsync()
                 : "No response from server";
 
+            _apiLogService.LogThirdParty("Gemini", url, "POST", (int?)response?.StatusCode, "Gemini request failed.", jsonPayload, errorContent, "AIGeminiService", "GenerateContentAsync");
+
             throw new InvalidOperationException($"Failed to generate content from Gemini API. Status Code: {response?.StatusCode}, Response: {errorContent}");
         }
 
         var responseContent = await response.Content.ReadAsStringAsync();
+        _apiLogService.LogThirdParty("Gemini", url, "POST", (int?)response.StatusCode, "Gemini response received.", jsonPayload, responseContent, "AIGeminiService", "GenerateContentAsync");
+
         using var document = JsonDocument.Parse(responseContent);
 
         try
@@ -151,6 +163,7 @@ public class AIGeminiService
         }
         catch (Exception ex)
         {
+            _apiLogService.LogThirdParty("Gemini", url, "POST", (int?)response.StatusCode, "Gemini response parsing failed.", jsonPayload, responseContent, "AIGeminiService", "GenerateContentAsync");
             throw new InvalidOperationException("Failed to parse response from Gemini API.", ex);
         }
     }

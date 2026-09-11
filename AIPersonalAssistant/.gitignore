@@ -230,3 +230,9 @@ _Pvt_Extensions
 
 # FAKE - F# Make
 .fake/
+
+
+appsettings.Development.json
+appsettings.json
+Dockerfile
+docker-compose.yml

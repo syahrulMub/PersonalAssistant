@@ -4,6 +4,8 @@ const LEVEL_COLORS = {
   ACCESS: "success",
   ERROR: "danger",
   INFO: "primary",
+  EMAIL: "info",
+  THIRD_PARTY: "warning",
 };
 
 function parseLogLine(line) {
@@ -21,6 +23,7 @@ function parseLogLine(line) {
       method: "",
       endpoint: "",
       statusCode: "",
+      provider: "-",
     };
   }
 
@@ -35,7 +38,14 @@ function parseLogLine(line) {
   const requestMatch = message.match(/^([A-Z]+)\s+([^\s]+)\s+->\s+(\d{3})/);
   const method = requestMatch ? requestMatch[1] : "";
   const endpoint = requestMatch ? requestMatch[2] : message;
-  const statusCode = requestMatch ? requestMatch[3] : "";
+  const statusCode = requestMatch
+    ? requestMatch[3]
+    : details.match(/StatusCode=(\d{3})/)?.[1] || "";
+
+  const provider = details.match(/Provider=([^\s]+)/)?.[1] || "-";
+  const endpointFromDetails =
+    details.match(/Endpoint=([^\s]+)/)?.[1] || endpoint;
+  const methodFromDetails = details.match(/Method=([^\s]+)/)?.[1] || method;
 
   return {
     timestamp,
@@ -45,9 +55,10 @@ function parseLogLine(line) {
     clientIp,
     message,
     details,
-    method,
-    endpoint,
+    method: methodFromDetails || method,
+    endpoint: endpointFromDetails || endpoint,
     statusCode,
+    provider,
   };
 }
 
@@ -123,6 +134,7 @@ export function ApiLogTracker() {
         parsed.endpoint,
         parsed.method,
         parsed.statusCode,
+        parsed.provider,
       ]
         .filter(Boolean)
         .join(" ")
@@ -142,6 +154,8 @@ export function ApiLogTracker() {
       ACCESS: 0,
       ERROR: 0,
       INFO: 0,
+      EMAIL: 0,
+      THIRD_PARTY: 0,
     };
 
     logs.forEach((line) => {
@@ -198,7 +212,7 @@ export function ApiLogTracker() {
       </div>
 
       <div className="row g-3 mb-4">
-        <div className="col-md-4">
+        <div className="col-md-3">
           <div className="card shadow-sm border-0 h-100">
             <div className="card-body">
               <div className="text-muted small">Total Events</div>
@@ -206,7 +220,7 @@ export function ApiLogTracker() {
             </div>
           </div>
         </div>
-        <div className="col-md-4">
+        <div className="col-md-3">
           <div className="card shadow-sm border-0 h-100">
             <div className="card-body">
               <div className="text-muted small">Access</div>
@@ -216,12 +230,22 @@ export function ApiLogTracker() {
             </div>
           </div>
         </div>
-        <div className="col-md-4">
+        <div className="col-md-3">
           <div className="card shadow-sm border-0 h-100">
             <div className="card-body">
               <div className="text-muted small">Errors</div>
               <div className="display-6 fw-semibold mt-2 text-danger">
                 {summary.ERROR}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="col-md-3">
+          <div className="card shadow-sm border-0 h-100">
+            <div className="card-body">
+              <div className="text-muted small">Email / Third-party</div>
+              <div className="display-6 fw-semibold mt-2 text-info">
+                {summary.EMAIL + summary.THIRD_PARTY}
               </div>
             </div>
           </div>
@@ -242,6 +266,8 @@ export function ApiLogTracker() {
                 <option value="ACCESS">Access</option>
                 <option value="ERROR">Error</option>
                 <option value="INFO">Info</option>
+                <option value="EMAIL">Email</option>
+                <option value="THIRD_PARTY">Third-party</option>
               </select>
             </div>
 
@@ -291,6 +317,7 @@ export function ApiLogTracker() {
                   <tr>
                     <th>Time</th>
                     <th>Level</th>
+                    <th>Provider</th>
                     <th>Method</th>
                     <th>Endpoint</th>
                     <th>Status</th>
@@ -298,12 +325,13 @@ export function ApiLogTracker() {
                     <th>Action</th>
                     <th>Client IP</th>
                     <th>Message</th>
+                    <th>Details</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredLogs.length === 0 ? (
                     <tr>
-                      <td colSpan="9" className="text-center py-4 text-muted">
+                      <td colSpan="11" className="text-center py-4 text-muted">
                         No log entries found.
                       </td>
                     </tr>
@@ -320,6 +348,9 @@ export function ApiLogTracker() {
                             <span className={`badge bg-${levelClass}`}>
                               {item.level}
                             </span>
+                          </td>
+                          <td className="small text-dark">
+                            {item.provider || item.controller}
                           </td>
                           <td>
                             <span className="fw-semibold">
@@ -344,6 +375,7 @@ export function ApiLogTracker() {
                           <td className="small">{item.action}</td>
                           <td className="small">{item.clientIp}</td>
                           <td className="small">{item.message}</td>
+                          <td className="small text-muted">{item.details}</td>
                         </tr>
                       );
                     })
