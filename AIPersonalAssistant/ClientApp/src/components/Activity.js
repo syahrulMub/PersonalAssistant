@@ -96,11 +96,14 @@ export function Activity() {
   const toggleModal = () => setIsModalOpen(!isModalOpen);
 
   // Mengambil data dari backend dengan pagination
-  const fetchActivities = async (currentPage = page, currentPageSize = pageSize) => {
+  const fetchActivities = async (
+    currentPage = page,
+    currentPageSize = pageSize,
+  ) => {
     try {
       setLoading(true);
       const response = await fetch(
-        `/api/activity?page=${currentPage}&pageSize=${currentPageSize}`
+        `/api/activity?page=${currentPage}&pageSize=${currentPageSize}`,
       );
       if (!response.ok) {
         throw new Error("Gagal mengambil data dari server.");
@@ -145,9 +148,7 @@ export function Activity() {
   // Hapus aktivitas
   const handleDelete = async (id, title) => {
     if (
-      !window.confirm(
-        `Apakah Anda yakin ingin menghapus aktivitas "${title}"?`
-      )
+      !window.confirm(`Apakah Anda yakin ingin menghapus aktivitas "${title}"?`)
     ) {
       return;
     }
@@ -288,7 +289,7 @@ export function Activity() {
                                     minute: "2-digit",
                                     day: "2-digit",
                                     month: "short",
-                                  }
+                                  },
                                 )
                               : "Aktif"}
                           </span>
@@ -328,8 +329,9 @@ export function Activity() {
             {/* Informasi Rentang Data & Pengaturan Ukuran Halaman */}
             <div className="d-flex align-items-center gap-3">
               <span className="text-muted small">
-                Menampilkan <strong>{startItem}</strong> - <strong>{endItem}</strong> dari{" "}
-                <strong>{totalCount}</strong> aktivitas
+                Menampilkan <strong>{startItem}</strong> -{" "}
+                <strong>{endItem}</strong> dari <strong>{totalCount}</strong>{" "}
+                aktivitas
               </span>
               <div className="d-flex align-items-center gap-1">
                 <span className="text-muted small">Baris:</span>
@@ -375,11 +377,13 @@ export function Activity() {
                         {pageNum}
                       </button>
                     </li>
-                  )
+                  ),
                 )}
 
                 {/* Tombol Next */}
-                <li className={`page-item ${page >= totalPages ? "disabled" : ""}`}>
+                <li
+                  className={`page-item ${page >= totalPages ? "disabled" : ""}`}
+                >
                   <button
                     className="page-link"
                     onClick={handleNextPage}

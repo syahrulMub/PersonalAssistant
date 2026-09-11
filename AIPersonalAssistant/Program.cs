@@ -3,6 +3,8 @@ using AIPersonalAssistant.Data;
 using AIPersonalAssistant.EmailServices;
 using Microsoft.EntityFrameworkCore;
 using AIPersonalAssistant.Services;
+using Hangfire;
+using Hangfire.Storage.SQLite;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -28,6 +30,20 @@ builder.Services.AddScoped<IEmailSevice, EmailService>();
 //service
 builder.Services.AddHostedService<BackgroundReminderService>();
 
+//gemini
+builder.Services.AddHttpClient<AIGeminiService>();
+
+//hangfire
+builder.Services.AddHangfire(configuration => configuration
+    .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+    .UseSimpleAssemblyNameTypeSerializer()
+    .UseRecommendedSerializerSettings()
+    .UseSQLiteStorage("Data Source=hangfire.db;"));
+
+builder.Services.AddHangfireServer();
+
+builder.Services.AddScoped<AIGeminiService>();
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", builder =>
@@ -41,11 +57,24 @@ builder.Services.AddControllersWithViews();
 
 var app = builder.Build();
 
+//auto migrate when deploy
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     dbContext.Database.Migrate();
 }
+
+//hangfire dashboard
+app.UseHangfireDashboard();
+
+RecurringJob.AddOrUpdate<AIGeminiService>(
+    "daily-ai-summary",
+    job => job.GenerateDailySummaryAsync(),
+    "0 21 * * *",
+    new RecurringJobOptions
+    {
+        TimeZone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Jakarta")
+    });
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
