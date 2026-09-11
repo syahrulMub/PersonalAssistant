@@ -69,7 +69,7 @@ using (var scope = app.Services.CreateScope())
 }
 
 //hangfire dashboard
-app.UseHangfireDashboard("hangfire", new DashboardOptions
+app.UseHangfireDashboard("/hangfire", new DashboardOptions
 {
     Authorization = new[] { new HangfireDashboardNoAuthFilter() }
 });
