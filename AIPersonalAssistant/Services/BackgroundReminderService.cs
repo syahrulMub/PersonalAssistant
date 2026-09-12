@@ -1,4 +1,5 @@
 using AIPersonalAssistant.Data;
+using AIPersonalAssistant.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace AIPersonalAssistant.Services;
@@ -38,20 +39,23 @@ public class BackgroundReminderService : BackgroundService
         using var scope = _serviceProvider.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var emailService = scope.ServiceProvider.GetRequiredService<EmailServices.IEmailSevice>();
+        var listUser = await dbContext.Users.ToListAsync();
 
         var targetWindow = DateTime.Now.AddMinutes(10);
-        var dueActivities = await dbContext.ActivityLogs
-            .Where(a => a.ReminderTime > DateTime.MinValue && a.ReminderTime <= targetWindow && a.IsReminder)
+        foreach (var user in listUser)
+        {
+            var dueActivities = await dbContext.ActivityLogs
+            .Where(a => a.ReminderTime > DateTime.MinValue && a.ReminderTime <= targetWindow && a.IsReminder && user.Id == a.UserId)
             .Take(10)
             .ToListAsync();
 
-        foreach (var activity in dueActivities)
-        {
-            string subject = $"🔔 Reminder Aktivitas: {activity.Title}";
-            string bodyHtml = $@"
+            foreach (var activity in dueActivities)
+            {
+                string subject = $"🔔 Reminder Aktivitas: {activity.Title}";
+                string bodyHtml = $@"
                 <div style='font-family: Arial, sans-serif; padding: 20px; color: #333;'>
                     <h2 style='color: #2b6cb0;'>Waktunya Pengingat!</h2>
-                    <p>Halo, ini adalah pengingat untuk aktivitas yang telah kamu jadwalkan:</p>
+                    <p>Halo {user.FullName}, ini adalah pengingat untuk aktivitas yang telah kamu jadwalkan:</p>
                     <div style='background-color: #f7fafc; border-left: 4px solid #3182ce; padding: 15px; margin: 15px 0;'>
                         <h3 style='margin: 0 0 10px 0;'>{activity.Title}</h3>
                         <p style='margin: 0;'>{activity.Description}</p>
@@ -60,13 +64,15 @@ public class BackgroundReminderService : BackgroundService
                     <hr style='border: none; border-top: 1px solid #e2e8f0;' />
                     <small style='color: #a0aec0;'>Dikirim otomatis oleh AI Personal Assistant</small>
                 </div>";
-            var sendEmail = await emailService.SendEmailAsync(subject, bodyHtml, null);
-            if (sendEmail)
-            {
-                activity.IsReminder = false;
-                dbContext.ActivityLogs.Update(activity);
+                var sendEmail = await emailService.SendEmailAsync(subject, bodyHtml, user.Email);
+                if (sendEmail)
+                {
+                    activity.IsReminder = false;
+                    dbContext.ActivityLogs.Update(activity);
+                }
             }
         }
+
         await dbContext.SaveChangesAsync();
     }
 }

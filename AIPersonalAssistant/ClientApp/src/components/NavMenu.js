@@ -33,7 +33,7 @@ export function NavMenu() {
         light
       >
         <NavbarBrand tag={Link} to="/">
-          AIPersonalAssistant
+          AI Personal Assistant
         </NavbarBrand>
         <NavbarToggler onClick={toggleNavbar} className="mr-2" />
         <Collapse
@@ -62,11 +62,14 @@ export function NavMenu() {
                 Activity
               </NavLink>
             </NavItem>
-            <NavItem>
-              <NavLink tag={Link} className="text-dark" to="/logs">
-                API Logs
-              </NavLink>
-            </NavItem>
+            {user?.role === "Admin" && (
+              <NavItem>
+                <NavLink tag={Link} className="text-dark" to="/logs">
+                  API Logs
+                </NavLink>
+              </NavItem>
+            )}
+
             {user && (
               <li className="nav-item ms-auto d-flex align-items-center">
                 <span className="text-muted me-3 small">

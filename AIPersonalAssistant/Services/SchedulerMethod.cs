@@ -4,6 +4,7 @@ using AIPersonalAssistant.DTOs;
 using AIPersonalAssistant.EmailServices;
 using AIPersonalAssistant.Models;
 using Microsoft.EntityFrameworkCore;
+using Org.BouncyCastle.Crypto.Prng;
 
 namespace AIPersonalAssistant.Services;
 
@@ -28,13 +29,17 @@ public class SchedulerMethod
     public async Task GenerateNightSummaryAsync()
     {
         var treedayago = DateTime.UtcNow.AddDays(-3);
-        var logs = await _dbContext.ActivityLogs
+        var listUser = await _dbContext.Users.ToListAsync();
+        foreach (var user in listUser)
+        {
+            var logs = await _dbContext.ActivityLogs
             .Where(a => a.CreateAt.Date <= DateTime.Now.Date && a.CreateAt.Date >= treedayago.Date)
+            .Where(x => x.UserId == user.Id)
             .OrderBy(a => a.ReminderTime)
             .ToListAsync();
-        var activitiesText = string.Join("\n", logs.Select(l => $"- {l.Title} {l.Description} {l.CreateAt}"));
+            var activitiesText = string.Join("\n", logs.Select(l => $"- {l.Title} {l.Description} dibuat pada {l.CreateAt}"));
 
-        string prompt = $@"
+            string prompt = $@"
                         Kamu adalah asisten pribadi pintar, suportif, dan reflektif.
                         Tugasmu adalah menganalisis seluruh aktivitas user hari ini untuk memberikan evaluasi penutup hari, rasa puas atas usaha yang telah dilakukan, serta ketenangan sebelum beristirahat.
 
@@ -51,23 +56,25 @@ public class SchedulerMethod
                         ""actionableInsights"": ""1-2 evaluasi santai atau catatan prioritas yang bisa disiapkan untuk esok hari agar tidur lebih tenang tanpa beban pikiran.""
                         }}";
 
-        var rawResponse = await _aiService.ExecuteGeminiApi(prompt);
-        var cleanJson = rawResponse.Replace("```json", "").Replace("```", "").Trim();
-        _logger.LogInformation("Generated JSON: {Json}", cleanJson);
-        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-        var result = JsonSerializer.Deserialize<DailySummaryAiDto>(cleanJson, options);
-        if (result == null)
-        {
-            _logger.LogError("Night summary JSON could not be deserialized: {Json}", cleanJson);
-            return;
+            var rawResponse = await _aiService.ExecuteGeminiApi(prompt);
+            var cleanJson = rawResponse.Replace("```json", "").Replace("```", "").Trim();
+            _logger.LogInformation("Generated JSON: {Json}", cleanJson);
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var result = JsonSerializer.Deserialize<DailySummaryAiDto>(cleanJson, options);
+            if (result == null)
+            {
+                _logger.LogError("Night summary JSON could not be deserialized: {Json}", cleanJson);
+                return;
+            }
+
+            await _aiRecapService.SaveRecapAsync(result);
+
+            //send email
+            string subject = "Night Summary from AI Assistant";
+            string body = BuildNightSummaryHtml(result.SummaryText, result.PositiveAffirmations, result.ActionableInsights);
+            await _emailService.SendEmailAsync(subject, body, user.Email);
         }
 
-        await _aiRecapService.SaveRecapAsync(result);
-
-        //send email
-        string subject = "Night Summary from AI Assistant";
-        string body = BuildNightSummaryHtml(result.SummaryText, result.PositiveAffirmations, result.ActionableInsights);
-        await _emailService.SendEmailAsync(subject, body, string.Empty);
     }
 
     private string BuildNightSummaryHtml(string summaryText, string positiveAffirmations, string actionableInsights)
@@ -379,13 +386,17 @@ public class SchedulerMethod
     public async Task GenerateMorningSummaryAsync()
     {
         var treedayago = DateTime.UtcNow.AddDays(-1);
-        var logs = await _dbContext.ActivityLogs
+        var listUser = await _dbContext.Users.ToListAsync();
+        foreach (var user in listUser)
+        {
+            var logs = await _dbContext.ActivityLogs
+            .Where(x => x.UserId == user.Id)
             .Where(a => a.CreateAt.Date <= DateTime.Now.Date && a.CreateAt.Date >= treedayago.Date)
             .OrderBy(a => a.ReminderTime)
             .ToListAsync();
-        var activitiesText = string.Join("\n", logs.Select(l => $"- {l.Title} {l.Description} {l.CreateAt}"));
+            var activitiesText = string.Join("\n", logs.Select(l => $"- {l.Title} {l.Description} {l.CreateAt}"));
 
-        string prompt = $@"
+            string prompt = $@"
                             Kamu adalah asisten pribadi pintar, penuh energi, dan berorientasi pada aksi.
                             Tugasmu adalah menyambut user di awal hari, membakar semangat produktivitas, serta membantu memetakan fokus utama berdasarkan agenda atau catatan tugas yang ada.
 
@@ -402,22 +413,24 @@ public class SchedulerMethod
                             ""actionableInsights"": ""Strategi taktis memulai hari (misal: teknik 'eat the frog' pada tugas terberat, pembagian time-block, atau tips menjaga fokus).""
                             }}";
 
-        var rawResponse = await _aiService.ExecuteGeminiApi(prompt);
-        var cleanJson = rawResponse.Replace("```json", "").Replace("```", "").Trim();
-        _logger.LogInformation("Generated JSON: {Json}", cleanJson);
-        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-        var result = JsonSerializer.Deserialize<DailySummaryAiDto>(cleanJson, options);
-        if (result == null)
-        {
-            _logger.LogError("Morning summary JSON could not be deserialized: {Json}", cleanJson);
-            return;
+            var rawResponse = await _aiService.ExecuteGeminiApi(prompt);
+            var cleanJson = rawResponse.Replace("```json", "").Replace("```", "").Trim();
+            _logger.LogInformation("Generated JSON: {Json}", cleanJson);
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var result = JsonSerializer.Deserialize<DailySummaryAiDto>(cleanJson, options);
+            if (result == null)
+            {
+                _logger.LogError("Morning summary JSON could not be deserialized: {Json}", cleanJson);
+                return;
+            }
+
+            await _aiRecapService.SaveRecapAsync(result);
+
+            //send email
+            string subject = "Morning Summary from AI Assistant";
+            string body = BuildMorningSummaryHtml(result.SummaryText, result.PositiveAffirmations, result.ActionableInsights);
+            await _emailService.SendEmailAsync(subject, body, user.Email);
         }
 
-        await _aiRecapService.SaveRecapAsync(result);
-
-        //send email
-        string subject = "Morning Summary from AI Assistant";
-        string body = BuildMorningSummaryHtml(result.SummaryText, result.PositiveAffirmations, result.ActionableInsights);
-        await _emailService.SendEmailAsync(subject, body, string.Empty);
     }
 }

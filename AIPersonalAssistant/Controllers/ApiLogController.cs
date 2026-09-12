@@ -1,8 +1,10 @@
 using AIPersonalAssistant.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AIPersonalAssistant.Controllers;
 
+[Authorize(Roles = "Admin")]
 [ApiController]
 [Route("api/[controller]")]
 public class ApiLogController : ControllerBase

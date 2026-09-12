@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-
+import api from "../api/axios";
 const LEVEL_COLORS = {
   ACCESS: "success",
   ERROR: "danger",
@@ -86,14 +86,11 @@ export function ApiLogTracker() {
     setError(null);
 
     try {
-      const response = await fetch(
-        `/api/ApiLog?date=${date}&page=${nextPage}&pageSize=${size}`,
+      const response = await api.get(
+        `ApiLog?date=${date}&page=${nextPage}&pageSize=${size}`,
       );
-      if (!response.ok) {
-        throw new Error("Unable to fetch API logs");
-      }
 
-      const payload = await response.json();
+      const payload = response.data;
       setAvailableDates(payload.availableDates || []);
       setLogs(payload.logs || []);
       setTotal(payload.total || 0);

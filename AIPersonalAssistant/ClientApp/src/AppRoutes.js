@@ -4,6 +4,7 @@ import { Home } from "./components/Home";
 import { Activity } from "./components/Activity";
 import { ApiLogTracker } from "./components/ApiLogTracker";
 import { Navigate } from "react-router-dom";
+import { AdminRoute } from "./components/AdminRoute";
 
 const AppRoutes = [
   {
@@ -28,7 +29,11 @@ const AppRoutes = [
   },
   {
     path: "/logs",
-    element: <ApiLogTracker />,
+    element: (
+      <AdminRoute>
+        <ApiLogTracker />
+      </AdminRoute>
+    ),
   },
 ];
 

@@ -77,6 +77,7 @@ public class AuthController : ControllerBase
         var token = _tokenService.CreateToken(user);
         return Ok(new AuthResponse(token, user.FullName, user.Email, user.Role));
     }
+
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> GetUsers()
     {
