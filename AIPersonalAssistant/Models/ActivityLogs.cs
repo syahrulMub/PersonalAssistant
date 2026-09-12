@@ -13,5 +13,7 @@ public class ActivityLogs
     public DateTime ReminderTime { get; set; }
     public DateTime CreateAt { get; set; }
     public bool IsCompleted { get; set; }
+    public virtual int UserId { get; set; }
+    public User User { get; set; }
 
 }

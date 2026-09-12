@@ -102,8 +102,12 @@ export function Activity() {
   ) => {
     try {
       setLoading(true);
+      const token = localStorage.getItem("token");
       const response = await fetch(
         `/api/activity?page=${currentPage}&pageSize=${currentPageSize}`,
+        {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        },
       );
       if (!response.ok) {
         throw new Error("Gagal mengambil data dari server.");
@@ -154,8 +158,10 @@ export function Activity() {
     }
 
     try {
+      const token = localStorage.getItem("token");
       const response = await fetch(`/api/activity/${id}`, {
         method: "DELETE",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
 
       if (response.ok) {

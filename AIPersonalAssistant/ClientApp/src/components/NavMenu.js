@@ -1,4 +1,4 @@
-import React, { Component } from "react";
+import React, { useState } from "react";
 import {
   Collapse,
   Navbar,
@@ -7,74 +7,83 @@ import {
   NavItem,
   NavLink,
 } from "reactstrap";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 import "./NavMenu.css";
 
-export class NavMenu extends Component {
-  static displayName = NavMenu.name;
+export function NavMenu() {
+  const [collapsed, setCollapsed] = useState(true);
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
-  constructor(props) {
-    super(props);
+  const toggleNavbar = () => {
+    setCollapsed(!collapsed);
+  };
 
-    this.toggleNavbar = this.toggleNavbar.bind(this);
-    this.state = {
-      collapsed: true,
-    };
-  }
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
+  };
 
-  toggleNavbar() {
-    this.setState({
-      collapsed: !this.state.collapsed,
-    });
-  }
-
-  render() {
-    return (
-      <header>
-        <Navbar
-          className="navbar-expand-sm navbar-toggleable-sm ng-white border-bottom box-shadow mb-3"
-          container
-          light
+  return (
+    <header>
+      <Navbar
+        className="navbar-expand-sm navbar-toggleable-sm ng-white border-bottom box-shadow mb-3"
+        container
+        light
+      >
+        <NavbarBrand tag={Link} to="/">
+          AIPersonalAssistant
+        </NavbarBrand>
+        <NavbarToggler onClick={toggleNavbar} className="mr-2" />
+        <Collapse
+          className="d-sm-inline-flex flex-sm-row-reverse"
+          isOpen={!collapsed}
+          navbar
         >
-          <NavbarBrand tag={Link} to="/">
-            AIPersonalAssistant
-          </NavbarBrand>
-          <NavbarToggler onClick={this.toggleNavbar} className="mr-2" />
-          <Collapse
-            className="d-sm-inline-flex flex-sm-row-reverse"
-            isOpen={!this.state.collapsed}
-            navbar
-          >
-            <ul className="navbar-nav flex-grow">
-              <NavItem>
-                <NavLink tag={Link} className="text-dark" to="/">
-                  Home
-                </NavLink>
-              </NavItem>
-              <NavItem>
-                <NavLink tag={Link} className="text-dark" to="/counter">
-                  Counter
-                </NavLink>
-              </NavItem>
-              <NavItem>
-                <NavLink tag={Link} className="text-dark" to="/fetch-data">
-                  Fetch data
-                </NavLink>
-              </NavItem>
-              <NavItem>
-                <NavLink tag={Link} className="text-dark" to="/activity">
-                  Activity
-                </NavLink>
-              </NavItem>
-              <NavItem>
-                <NavLink tag={Link} className="text-dark" to="/logs">
-                  API Logs
-                </NavLink>
-              </NavItem>
-            </ul>
-          </Collapse>
-        </Navbar>
-      </header>
-    );
-  }
+          <ul className="navbar-nav flex-grow align-items-center">
+            <NavItem>
+              <NavLink tag={Link} className="text-dark" to="/">
+                Home
+              </NavLink>
+            </NavItem>
+            <NavItem>
+              <NavLink tag={Link} className="text-dark" to="/counter">
+                Counter
+              </NavLink>
+            </NavItem>
+            <NavItem>
+              <NavLink tag={Link} className="text-dark" to="/fetch-data">
+                Fetch data
+              </NavLink>
+            </NavItem>
+            <NavItem>
+              <NavLink tag={Link} className="text-dark" to="/activity">
+                Activity
+              </NavLink>
+            </NavItem>
+            <NavItem>
+              <NavLink tag={Link} className="text-dark" to="/logs">
+                API Logs
+              </NavLink>
+            </NavItem>
+            {user && (
+              <li className="nav-item ms-auto d-flex align-items-center">
+                <span className="text-muted me-3 small">
+                  👤 {user.fullName || user.email} ({user.role || "User"})
+                </span>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="btn btn-sm btn-outline-danger"
+                >
+                  Logout
+                </button>
+              </li>
+            )}
+          </ul>
+        </Collapse>
+      </Navbar>
+    </header>
+  );
 }

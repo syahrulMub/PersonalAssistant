@@ -1,10 +1,14 @@
+using System.Security.Claims;
 using AIPersonalAssistant.Data;
 using AIPersonalAssistant.DTOs;
+using AIPersonalAssistant.Extension;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace AIPersonalAssistant.Controllers;
 
+[Authorize]
 [ApiController]
 [Route("api/[controller]")]
 public class ActivityController : ControllerBase
@@ -23,6 +27,7 @@ public class ActivityController : ControllerBase
     {
         try
         {
+            int userId = User.GetUserId();
             _logger.LogInformation("ActivityController.GetActivities called. page={Page}, pageSize={PageSize}", page, pageSize);
 
             if (page < 1) page = 1;
@@ -32,6 +37,7 @@ public class ActivityController : ControllerBase
             var totalCount = await _dbContext.ActivityLogs.CountAsync();
 
             var items = await _dbContext.ActivityLogs
+                .Where(x => x.UserId == userId)
                 .OrderByDescending(a => a.CreateAt)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
@@ -129,7 +135,8 @@ public class ActivityController : ControllerBase
                 IsReminder = createActivityDto.IsReminder,
                 ReminderTime = createActivityDto.RemindAt ?? DateTime.MinValue,
                 CreateAt = DateTime.UtcNow,
-                IsCompleted = false
+                IsCompleted = false,
+                UserId = User.GetUserId()
             };
 
             _dbContext.ActivityLogs.Add(activity);

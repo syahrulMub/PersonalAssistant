@@ -47,10 +47,12 @@ export function CreateActivity({ onActivityCreated, onCancel }) {
           formData.isReminder && formData.remindAt ? formData.remindAt : null,
       };
 
+      const token = localStorage.getItem("token");
       const response = await fetch("/api/activity", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(payload),
       });
