@@ -73,13 +73,22 @@ export function ApiLogTracker() {
   const [selectedLevel, setSelectedLevel] = useState("ALL");
   const [selectedStatusCode, setSelectedStatusCode] = useState("ALL");
   const [searchText, setSearchText] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(100);
+  const [total, setTotal] = useState(0);
 
-  const fetchLogs = async (date = selectedDate) => {
+  const fetchLogs = async (
+    date = selectedDate,
+    nextPage = page,
+    size = pageSize,
+  ) => {
     setLoading(true);
     setError(null);
 
     try {
-      const response = await fetch(`/api/ApiLog?date=${date}&take=500`);
+      const response = await fetch(
+        `/api/ApiLog?date=${date}&page=${nextPage}&pageSize=${size}`,
+      );
       if (!response.ok) {
         throw new Error("Unable to fetch API logs");
       }
@@ -87,6 +96,9 @@ export function ApiLogTracker() {
       const payload = await response.json();
       setAvailableDates(payload.availableDates || []);
       setLogs(payload.logs || []);
+      setTotal(payload.total || 0);
+      setPage(payload.page || nextPage);
+      setPageSize(payload.pageSize || size);
       setSelectedDate(payload.date || date);
     } catch (err) {
       setError(err.message);
@@ -96,7 +108,7 @@ export function ApiLogTracker() {
   };
 
   useEffect(() => {
-    fetchLogs(selectedDate);
+    fetchLogs(selectedDate, page, pageSize);
   }, []);
 
   const statusCodes = useMemo(() => {
@@ -216,7 +228,7 @@ export function ApiLogTracker() {
           <div className="card shadow-sm border-0 h-100">
             <div className="card-body">
               <div className="text-muted small">Total Events</div>
-              <div className="display-6 fw-semibold mt-2">{logs.length}</div>
+              <div className="display-6 fw-semibold mt-2">{total}</div>
             </div>
           </div>
         </div>
@@ -301,6 +313,36 @@ export function ApiLogTracker() {
               />
             </div>
           </div>
+        </div>
+      </div>
+
+      <div className="d-flex justify-content-between align-items-center gap-3 mb-3">
+        <div className="text-muted small">
+          Page {page} • {pageSize} entries per page
+        </div>
+        <div className="btn-group">
+          <button
+            className="btn btn-outline-secondary"
+            disabled={page <= 1 || loading}
+            onClick={() => {
+              const nextPage = Math.max(page - 1, 1);
+              setPage(nextPage);
+              fetchLogs(selectedDate, nextPage, pageSize);
+            }}
+          >
+            Previous
+          </button>
+          <button
+            className="btn btn-outline-secondary"
+            disabled={logs.length < pageSize || loading}
+            onClick={() => {
+              const nextPage = page + 1;
+              setPage(nextPage);
+              fetchLogs(selectedDate, nextPage, pageSize);
+            }}
+          >
+            Next
+          </button>
         </div>
       </div>
 

@@ -15,19 +15,23 @@ public class ApiLogController : ControllerBase
     }
 
     [HttpGet]
-    public IActionResult GetLogs([FromQuery] string? date = null, [FromQuery] int take = 100)
+    public IActionResult GetLogs([FromQuery] string? date = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 100)
     {
         var selectedDate = string.IsNullOrWhiteSpace(date)
             ? DateTime.UtcNow.ToString("yyyy-MM-dd")
             : date;
 
-        var logs = _apiLogService.ReadLogs(take, selectedDate);
+        var logs = _apiLogService.ReadLogs(page, pageSize, selectedDate);
+        var total = _apiLogService.GetLogCount(selectedDate);
         var dates = _apiLogService.GetLogDates();
 
         return Ok(new
         {
             date = selectedDate,
             availableDates = dates,
+            page,
+            pageSize,
+            total,
             logs
         });
     }

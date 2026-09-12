@@ -44,6 +44,7 @@ public class AIGeminiService
 
         _httpClient.DefaultRequestHeaders.Authorization = null;
         var url = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key={_apiKey}";
+        var safeUrlForLog = url.Replace(_apiKey ?? string.Empty, "***REDACTED***");
         var payload = new
         {
             contents = new[]
@@ -60,7 +61,7 @@ public class AIGeminiService
         var jsonPayload = JsonSerializer.Serialize(payload);
         HttpResponseMessage? response = null;
 
-        _apiLogService.LogThirdParty("Gemini", url, "POST", null, "Gemini request started.", jsonPayload, null, "AIGeminiService", "GenerateContentAsync");
+        _apiLogService.LogThirdParty("Gemini", safeUrlForLog, "POST", null, "Gemini request started.", jsonPayload, null, "AIGeminiService", "GenerateContentAsync");
 
         for (int i = 0; i < 5; i++)
         {
@@ -81,13 +82,13 @@ public class AIGeminiService
                 ? await response.Content.ReadAsStringAsync()
                 : "No response from server";
 
-            _apiLogService.LogThirdParty("Gemini", url, "POST", (int?)response?.StatusCode, "Gemini request failed.", jsonPayload, errorContent, "AIGeminiService", "GenerateContentAsync");
+            _apiLogService.LogThirdParty("Gemini", safeUrlForLog, "POST", (int?)response?.StatusCode, "Gemini request failed.", jsonPayload, errorContent, "AIGeminiService", "GenerateContentAsync");
 
             throw new InvalidOperationException($"Failed to generate content from Gemini API. Status Code: {response?.StatusCode}, Response: {errorContent}");
         }
 
         var responseContent = await response.Content.ReadAsStringAsync();
-        _apiLogService.LogThirdParty("Gemini", url, "POST", (int?)response.StatusCode, "Gemini response received.", jsonPayload, responseContent, "AIGeminiService", "GenerateContentAsync");
+        _apiLogService.LogThirdParty("Gemini", safeUrlForLog, "POST", (int?)response.StatusCode, "Gemini response received.", jsonPayload, responseContent, "AIGeminiService", "GenerateContentAsync");
 
         using var document = JsonDocument.Parse(responseContent);
 
@@ -109,7 +110,7 @@ public class AIGeminiService
         }
         catch (Exception ex)
         {
-            _apiLogService.LogThirdParty("Gemini", url, "POST", (int?)response.StatusCode, "Gemini response parsing failed.", jsonPayload, responseContent, "AIGeminiService", "GenerateContentAsync");
+            _apiLogService.LogThirdParty("Gemini", safeUrlForLog, "POST", (int?)response.StatusCode, "Gemini response parsing failed.", jsonPayload, responseContent, "AIGeminiService", "GenerateContentAsync");
             throw new InvalidOperationException("Failed to parse response from Gemini API.", ex);
         }
     }
