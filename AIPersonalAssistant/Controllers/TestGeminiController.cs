@@ -29,7 +29,7 @@ public class TestGeminiController : ControllerBase
                 return BadRequest("Prompt cannot be empty.");
             }
 
-            await _aiGeminiService.ExecuteGeminiApi("test API");
+            await _aiGeminiService.ExecuteGeminiApi("test API", "ApiKeyVoiceActivity");
             _logger.LogInformation("TestGeminiController.GenerateContent completed.");
             return Ok();
         }

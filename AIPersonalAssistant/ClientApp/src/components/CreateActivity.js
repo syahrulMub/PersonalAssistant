@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 
 const initialState = {
   title: "",
@@ -8,10 +8,48 @@ const initialState = {
   remindAt: "",
 };
 
-export function CreateActivity({ onActivityCreated, onCancel }) {
+export function CreateActivity({
+  initialData = null,
+  originalVoiceText = "",
+  onActivityCreated,
+  onCancel,
+  onReSpeech,
+}) {
   const [formData, setFormData] = useState(initialState);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+
+  // Populate data awal jika berasal dari hasil parsing suara Gemini
+  useEffect(() => {
+    if (initialData) {
+      let formattedRemindAt = "";
+      if (initialData.remindAt) {
+        try {
+          const d = new Date(initialData.remindAt);
+          if (!isNaN(d.getTime())) {
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, "0");
+            const day = String(d.getDate()).padStart(2, "0");
+            const hours = String(d.getHours()).padStart(2, "0");
+            const minutes = String(d.getMinutes()).padStart(2, "0");
+            formattedRemindAt = `${year}-${month}-${day}T${hours}:${minutes}`;
+          }
+        } catch (e) {
+          formattedRemindAt = "";
+        }
+      }
+
+      setFormData({
+        title: initialData.title || "",
+        description: initialData.description || "",
+        category: initialData.category || "General",
+        isReminder: Boolean(initialData.isReminder),
+        remindAt: formattedRemindAt,
+      });
+    } else {
+      setFormData(initialState);
+    }
+  }, [initialData]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -79,6 +117,22 @@ export function CreateActivity({ onActivityCreated, onCancel }) {
 
   return (
     <form onSubmit={handleSubmit}>
+      {/* Banner informasi jika data di-generate oleh AI Gemini */}
+      {originalVoiceText && (
+        <div className="alert alert-info py-2 px-3 mb-3 d-flex align-items-start gap-2 shadow-sm border-info">
+          <span className="fs-5">✨</span>
+          <div className="small flex-grow-1">
+            <strong>Dihasilkan otomatis oleh Gemini AI dari ucapan:</strong>
+            <div className="fst-italic text-dark mt-1 p-2 bg-white rounded border">
+              "{originalVoiceText}"
+            </div>
+            <span className="text-muted d-block mt-1">
+              Silakan periksa atau sesuaikan data di bawah sebelum menyimpan.
+            </span>
+          </div>
+        </div>
+      )}
+
       {errorMessage && (
         <div className="alert alert-danger py-2">{errorMessage}</div>
       )}
@@ -168,34 +222,50 @@ export function CreateActivity({ onActivityCreated, onCancel }) {
       )}
 
       {/* Tombol Aksi Modal */}
-      <div className="d-flex justify-content-end gap-2 pt-3 border-top">
-        {onCancel && (
+      <div className="d-flex justify-content-between align-items-center gap-2 pt-3 border-top">
+        <div>
+          {onReSpeech && (
+            <button
+              type="button"
+              className="btn btn-outline-danger d-inline-flex align-items-center gap-1"
+              onClick={onReSpeech}
+              disabled={loading}
+              title="Rekam ulang suara Anda"
+            >
+              <span>🎤</span>
+              <span>Bicara Ulang</span>
+            </button>
+          )}
+        </div>
+        <div className="d-flex gap-2">
+          {onCancel && (
+            <button
+              type="button"
+              className="btn btn-outline-secondary"
+              onClick={onCancel}
+              disabled={loading}
+            >
+              Batal
+            </button>
+          )}
           <button
-            type="button"
-            className="btn btn-outline-secondary"
-            onClick={onCancel}
+            type="submit"
+            className="btn btn-primary px-4"
             disabled={loading}
           >
-            Batal
+            {loading ? (
+              <span>
+                <span
+                  className="spinner-border spinner-border-sm me-2"
+                  role="status"
+                />
+                Menyimpan...
+              </span>
+            ) : (
+              "Simpan Aktivitas"
+            )}
           </button>
-        )}
-        <button
-          type="submit"
-          className="btn btn-primary px-4"
-          disabled={loading}
-        >
-          {loading ? (
-            <span>
-              <span
-                className="spinner-border spinner-border-sm me-2"
-                role="status"
-              />
-              Menyimpan...
-            </span>
-          ) : (
-            "Simpan Aktivitas"
-          )}
-        </button>
+        </div>
       </div>
     </form>
   );

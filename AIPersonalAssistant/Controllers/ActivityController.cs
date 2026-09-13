@@ -2,6 +2,7 @@ using System.Security.Claims;
 using AIPersonalAssistant.Data;
 using AIPersonalAssistant.DTOs;
 using AIPersonalAssistant.Extension;
+using AIPersonalAssistant.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -15,11 +16,13 @@ public class ActivityController : ControllerBase
 {
     private readonly AppDbContext _dbContext;
     private readonly ILogger<ActivityController> _logger;
+    private readonly AIGeminiService _aiGeminiService;
 
-    public ActivityController(AppDbContext dbContext, ILogger<ActivityController> logger)
+    public ActivityController(AppDbContext dbContext, ILogger<ActivityController> logger, AIGeminiService aiGeminiService)
     {
         _dbContext = dbContext;
         _logger = logger;
+        _aiGeminiService = aiGeminiService;
     }
 
     [HttpGet]
@@ -188,6 +191,67 @@ public class ActivityController : ControllerBase
         {
             _logger.LogError(ex, "ActivityController.DeleteActivity failed. id={Id}", id);
             return StatusCode(500, "Error deleting activity.");
+        }
+    }
+
+    [HttpPost("parse-voice")]
+    public async Task<IActionResult> ParseFromVoice([FromBody] ParseVoiceRequestDto? dto)
+    {
+        try
+        {
+            if (dto == null || string.IsNullOrWhiteSpace(dto.SpeechText))
+            {
+                return BadRequest(new ParseVoiceResponseDto
+                {
+                    Success = false,
+                    Message = "Teks suara tidak boleh kosong."
+                });
+            }
+
+            _logger.LogInformation("ActivityController.ParseFromVoice called. SpeechTextLength={Length}", dto.SpeechText.Length);
+
+            // Gunakan waktu lokal pengguna atau WIB (GMT+7)
+            DateTime clientNow = DateTime.UtcNow.AddHours(7);
+            if (!string.IsNullOrWhiteSpace(dto.ClientTimeZone))
+            {
+                try
+                {
+                    var tz = TimeZoneInfo.FindSystemTimeZoneById(dto.ClientTimeZone);
+                    clientNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
+                }
+                catch
+                {
+                    // Fallback to GMT+7
+                }
+            }
+
+            var parsedActivity = await _aiGeminiService.ParseActivityFromSpeechAsync(dto.SpeechText, clientNow);
+
+            return Ok(new ParseVoiceResponseDto
+            {
+                Success = true,
+                RawTranscript = dto.SpeechText,
+                Activity = parsedActivity,
+                Message = "Berhasil mem-parsing suara dengan Gemini AI."
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "ActivityController.ParseFromVoice failed.");
+            return Ok(new ParseVoiceResponseDto
+            {
+                Success = false,
+                RawTranscript = dto?.SpeechText ?? string.Empty,
+                Activity = new CreateActivityDto
+                {
+                    Title = (dto?.SpeechText?.Length > 50 ? dto.SpeechText.Substring(0, 50) + "..." : dto?.SpeechText) ?? string.Empty,
+                    Description = dto?.SpeechText ?? string.Empty,
+                    Category = "General",
+                    IsReminder = false,
+                    RemindAt = null
+                },
+                Message = $"Gemini AI gagal memproses ({ex.Message}). Teks suara Anda dimasukkan ke form agar tidak hilang dan dapat diedit secara manual."
+            });
         }
     }
 }

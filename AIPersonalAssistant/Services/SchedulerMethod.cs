@@ -56,7 +56,7 @@ public class SchedulerMethod
                         ""actionableInsights"": ""1-2 evaluasi santai atau catatan prioritas yang bisa disiapkan untuk esok hari agar tidur lebih tenang tanpa beban pikiran.""
                         }}";
 
-            var rawResponse = await _aiService.ExecuteGeminiApi(prompt);
+            var rawResponse = await _aiService.ExecuteGeminiApi(prompt, "ApiKeyRecapDaily");
             var cleanJson = rawResponse.Replace("```json", "").Replace("```", "").Trim();
             _logger.LogInformation("Generated JSON: {Json}", cleanJson);
             var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
@@ -413,7 +413,7 @@ public class SchedulerMethod
                             ""actionableInsights"": ""Strategi taktis memulai hari (misal: teknik 'eat the frog' pada tugas terberat, pembagian time-block, atau tips menjaga fokus).""
                             }}";
 
-            var rawResponse = await _aiService.ExecuteGeminiApi(prompt);
+            var rawResponse = await _aiService.ExecuteGeminiApi(prompt, "ApiKeyRecapDaily");
             var cleanJson = rawResponse.Replace("```json", "").Replace("```", "").Trim();
             _logger.LogInformation("Generated JSON: {Json}", cleanJson);
             var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
