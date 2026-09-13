@@ -11,7 +11,6 @@ export const useSpeechRecognition = (
   const recognitionRef = useRef(null);
   const shouldListenRef = useRef(false);
   const restartTimerRef = useRef(null);
-  const sessionFinalRef = useRef(""); // Menyimpan final text khusus di sesi aktif berjalan
 
   const onSpeechRef = useRef(onSpeech);
   const onSessionEndRef = useRef(onSessionEnd);
@@ -41,35 +40,29 @@ export const useSpeechRecognition = (
     recognition.lang = language;
 
     recognition.onstart = () => {
-      sessionFinalRef.current = "";
       setIsListening(true);
     };
 
     recognition.onresult = (event) => {
+      let finalTranscript = "";
       let interimTranscript = "";
 
-      // Mulai dari event.resultIndex untuk mencegah duplikasi token di Android & Desktop
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const result = event.results[i];
-        const transcript = result[0]?.transcript || "";
-
-        if (result.isFinal) {
-          sessionFinalRef.current += transcript + " ";
+      // Rekonstruksi transkrip sesi aktif secara langsung tanpa akumulasi berulang
+      for (let i = 0; i < event.results.length; i++) {
+        const item = event.results[i][0]?.transcript || "";
+        if (event.results[i].isFinal) {
+          finalTranscript += item + " ";
         } else {
-          interimTranscript += transcript;
+          interimTranscript += item;
         }
       }
 
-      const fullSessionText = (
-        sessionFinalRef.current +
-        " " +
-        interimTranscript
-      )
+      const sessionText = (finalTranscript + " " + interimTranscript)
         .trim()
         .replace(/\s+/g, " ");
 
-      if (onSpeechRef.current && fullSessionText) {
-        onSpeechRef.current(fullSessionText);
+      if (onSpeechRef.current && sessionText) {
+        onSpeechRef.current(sessionText);
       }
     };
 
@@ -87,25 +80,21 @@ export const useSpeechRecognition = (
     };
 
     recognition.onend = () => {
-      // Notifikasi ke consumer untuk mengunci teks sesi sebelumnya
+      // Simpan hasil sesi sebelumnya sebelum restart
       if (onSessionEndRef.current) {
         onSessionEndRef.current();
       }
 
-      sessionFinalRef.current = "";
-
-      // Sambung otomatis jika user masih dalam mode mendengarkan (mengatasi auto-stop di Chrome Mobile)
+      // Auto-restart jika masih dalam mode aktif mendengarkan (mengatasi auto-disconnect Chrome Mobile)
       if (shouldListenRef.current) {
         if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
         restartTimerRef.current = setTimeout(() => {
           if (shouldListenRef.current && recognitionRef.current) {
             try {
               recognitionRef.current.start();
-            } catch {
-              // Abaikan jika recognition sudah dalam status running
-            }
+            } catch {}
           }
-        }, 200);
+        }, 150);
       } else {
         setIsListening(false);
       }
@@ -127,15 +116,12 @@ export const useSpeechRecognition = (
   const startListening = useCallback(() => {
     shouldListenRef.current = true;
     setError(null);
-    sessionFinalRef.current = "";
 
     if (recognitionRef.current) {
       try {
         recognitionRef.current.start();
         setIsListening(true);
-      } catch {
-        // Recognition mungkin sedang aktif
-      }
+      } catch {}
     }
   }, []);
 
@@ -153,7 +139,6 @@ export const useSpeechRecognition = (
 
   const resetTranscript = useCallback(() => {
     shouldListenRef.current = false;
-    sessionFinalRef.current = "";
     if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
 
     if (recognitionRef.current) {

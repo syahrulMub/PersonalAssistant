@@ -12,22 +12,37 @@ export const VoiceInput = forwardRef(
   ({ onSpeechComplete, isProcessing = false }, ref) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editableText, setEditableText] = useState("");
-    const baseTextRef = useRef("");
 
-    // Menggabungkan teks dasar yang sudah fix/diedit dengan ucapan yang baru masuk
+    // Memisahkan teks dasar dengan suara berjalan
+    const baseTextRef = useRef("");
+    const liveSpeechRef = useRef("");
+
+    // Helper untuk menggabungkan teks dasar dan live audio tanpa duplikasi spasi
+    const renderFullText = (base, live) => {
+      const b = (base || "").trim();
+      const l = (live || "").trim();
+      if (b && l) return `${b} ${l}`;
+      return b || l || "";
+    };
+
+    // Callback saat ada suara aktif masuk dari pengenal suara
     const handleSpeech = useCallback((sessionTranscript) => {
-      const base = baseTextRef.current.trim();
-      const currentSpeech = (sessionTranscript || "").trim();
-      const combined = base ? `${base} ${currentSpeech}` : currentSpeech;
-      setEditableText(combined);
+      liveSpeechRef.current = sessionTranscript;
+      setEditableText(
+        renderFullText(baseTextRef.current, liveSpeechRef.current),
+      );
     }, []);
 
-    // Mengunci teks saat mikrofon jeda/berhenti agar ucapan berikutnya menyambung di akhir
+    // Callback saat sesi suara selesai/jeda: commit live text ke base text
     const handleSessionEnd = useCallback(() => {
-      setEditableText((prev) => {
-        baseTextRef.current = prev.trim();
-        return prev;
-      });
+      if (liveSpeechRef.current) {
+        baseTextRef.current = renderFullText(
+          baseTextRef.current,
+          liveSpeechRef.current,
+        );
+        liveSpeechRef.current = "";
+        setEditableText(baseTextRef.current);
+      }
     }, []);
 
     const {
@@ -41,6 +56,7 @@ export const VoiceInput = forwardRef(
     const openVoiceModal = useCallback(() => {
       resetTranscript();
       baseTextRef.current = "";
+      liveSpeechRef.current = "";
       setEditableText("");
       setIsModalOpen(true);
       setTimeout(() => {
@@ -52,6 +68,7 @@ export const VoiceInput = forwardRef(
       stopListening();
       resetTranscript();
       baseTextRef.current = "";
+      liveSpeechRef.current = "";
       setEditableText("");
       setIsModalOpen(false);
     }, [stopListening, resetTranscript]);
@@ -64,6 +81,7 @@ export const VoiceInput = forwardRef(
 
     const handleReset = () => {
       baseTextRef.current = "";
+      liveSpeechRef.current = "";
       setEditableText("");
       resetTranscript();
       setTimeout(() => {
@@ -73,27 +91,39 @@ export const VoiceInput = forwardRef(
 
     const handleToggleListening = () => {
       if (isListening) {
-        baseTextRef.current = editableText.trim();
+        // Kunci teks saat dijeda
+        if (liveSpeechRef.current) {
+          baseTextRef.current = renderFullText(
+            baseTextRef.current,
+            liveSpeechRef.current,
+          );
+          liveSpeechRef.current = "";
+          setEditableText(baseTextRef.current);
+        }
         stopListening();
       } else {
-        baseTextRef.current = editableText.trim();
         startListening();
       }
     };
 
     const handleTextChange = (e) => {
-      const newVal = e.target.value;
-      setEditableText(newVal);
-      baseTextRef.current = newVal.trim();
+      const val = e.target.value;
+      baseTextRef.current = val;
+      liveSpeechRef.current = "";
+      setEditableText(val);
 
-      // Jeda otomatis jika user mulai mengetik manual
+      // Jeda listening saat pengguna mengedit manual
       if (isListening) {
         stopListening();
       }
     };
 
     const handleProcessWithAi = () => {
-      const finalTranscript = editableText.trim();
+      // Pastikan semua teks terkunci sebelum kirim ke AI
+      const finalTranscript = renderFullText(
+        baseTextRef.current,
+        liveSpeechRef.current,
+      ).trim();
       if (!finalTranscript) return;
 
       stopListening();
@@ -104,6 +134,7 @@ export const VoiceInput = forwardRef(
       }
 
       baseTextRef.current = "";
+      liveSpeechRef.current = "";
       setEditableText("");
     };
 
