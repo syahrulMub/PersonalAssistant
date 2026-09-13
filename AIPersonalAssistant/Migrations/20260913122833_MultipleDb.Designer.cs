@@ -3,6 +3,7 @@ using System;
 using AIPersonalAssistant.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,34 +11,14 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AIPersonalAssistant.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260913122833_MultipleDb")]
+    partial class MultipleDb
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "7.0.0");
-
-            modelBuilder.Entity("AIPersonalAssistant.Models.AIFeature", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Key")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("AIFeatures");
-                });
 
             modelBuilder.Entity("AIPersonalAssistant.Models.AIRecap", b =>
                 {
@@ -160,30 +141,9 @@ namespace AIPersonalAssistant.Migrations
                             Email = "syahrul.mubarrok4@gmail.com",
                             FullName = "Initial Admin",
                             IsApproved = true,
-                            PasswordHash = "$2a$11$v8q7wU1aUQLdjm1v/55fL.4Q4naY4GYl.j2lkhc/cbJ/W/agx7.ue",
+                            PasswordHash = "$2a$11$yb9xEaBn75.TQpcGrWf/xuOBHy6Dd6YBr4JNFpv5VLdu.mRZ2/K7y",
                             Role = "Admin"
                         });
-                });
-
-            modelBuilder.Entity("AIPersonalAssistant.Models.UserAIFeature", b =>
-                {
-                    b.Property<int>("UserId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("FeatureId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("IsEnabled")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("UserId", "FeatureId");
-
-                    b.HasIndex("FeatureId");
-
-                    b.ToTable("UserAIFeatures");
                 });
 
             modelBuilder.Entity("AIPersonalAssistant.Models.AIRecap", b =>
@@ -206,35 +166,6 @@ namespace AIPersonalAssistant.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
-                });
-
-            modelBuilder.Entity("AIPersonalAssistant.Models.UserAIFeature", b =>
-                {
-                    b.HasOne("AIPersonalAssistant.Models.AIFeature", "AIFeature")
-                        .WithMany("UserAIFeatures")
-                        .HasForeignKey("FeatureId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("AIPersonalAssistant.Models.User", "User")
-                        .WithMany("UserAIFeatures")
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("AIFeature");
-
-                    b.Navigation("User");
-                });
-
-            modelBuilder.Entity("AIPersonalAssistant.Models.AIFeature", b =>
-                {
-                    b.Navigation("UserAIFeatures");
-                });
-
-            modelBuilder.Entity("AIPersonalAssistant.Models.User", b =>
-                {
-                    b.Navigation("UserAIFeatures");
                 });
 #pragma warning restore 612, 618
         }

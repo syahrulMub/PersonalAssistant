@@ -11,6 +11,8 @@ public class AppDbContext : DbContext
     public DbSet<ActivityLogs> ActivityLogs { get; set; }
     public DbSet<AIRecap> AIRecaps { get; set; }
     public DbSet<User> Users { get; set; }
+    public DbSet<AIFeature> AIFeatures { get; set; }
+    public DbSet<UserAIFeature> UserAIFeatures { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -33,6 +35,19 @@ public class AppDbContext : DbContext
         .Property(a => a.UserId)
         .HasDefaultValue(1);
 
+        // Konfigurasi Pivot Table
+        modelBuilder.Entity<UserAIFeature>()
+            .HasKey(uf => new { uf.UserId, uf.FeatureId });
+
+        modelBuilder.Entity<UserAIFeature>()
+            .HasOne(uf => uf.User)
+            .WithMany(u => u.UserAIFeatures)
+            .HasForeignKey(uf => uf.UserId);
+
+        modelBuilder.Entity<UserAIFeature>()
+            .HasOne(uf => uf.AIFeature)
+            .WithMany(f => f.UserAIFeatures)
+            .HasForeignKey(uf => uf.FeatureId);
     }
 
 }

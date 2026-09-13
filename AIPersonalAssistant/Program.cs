@@ -15,8 +15,16 @@ using System.Security.Claims;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<IDatabaseContextResolver, DatabaseContextResolver>();
+builder.Services.AddDbContext<AppDbContext>((serviceProvider, options) =>
+{
+    var resolver = serviceProvider.GetRequiredService<IDatabaseContextResolver>();
+
+    options.UseSqlite(resolver.GetConnectionString());
+
+});
 
 
 builder.Services.AddEndpointsApiExplorer();
@@ -122,10 +130,23 @@ builder.Services.AddControllersWithViews();
 var app = builder.Build();
 
 //auto migrate when deploy
+var baseDir = AppContext.BaseDirectory;
+var databaseMode = new[]
+{
+app.Configuration.GetConnectionString("DefaultConnection"),
+    app.Configuration.GetConnectionString("DevelopmentConnection")
+};
 using (var scope = app.Services.CreateScope())
 {
-    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    dbContext.Database.Migrate();
+    foreach (var database in databaseMode)
+    {
+        var optionsBuilder = new DbContextOptionsBuilder<AppDbContext>();
+        optionsBuilder.UseSqlite(database);
+
+        using var dbContext = new AppDbContext(optionsBuilder.Options);
+        dbContext.Database.Migrate();
+
+    }
 }
 
 //hangfire dashboard
