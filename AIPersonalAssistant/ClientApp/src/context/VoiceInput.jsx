@@ -1,6 +1,5 @@
 import React, {
   useState,
-  useEffect,
   useImperativeHandle,
   forwardRef,
   useCallback,
@@ -13,60 +12,60 @@ export const VoiceInput = forwardRef(
   ({ onSpeechComplete, isProcessing = false }, ref) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editableText, setEditableText] = useState("");
+    const editableTextRef = useRef("");
     const baseTextRef = useRef("");
 
+    const updateEditableText = useCallback((val) => {
+      editableTextRef.current = val;
+      setEditableText(val);
+    }, []);
+
+    // Callback saat ada suara baru yang terdeteksi di sesi perekaman berjalan
+    const handleSpeech = useCallback(
+      (sessionTranscript) => {
+        const base = baseTextRef.current.trim();
+        const speech = (sessionTranscript || "").trim();
+        const combined = base ? `${base} ${speech}` : speech;
+        updateEditableText(combined);
+      },
+      [updateEditableText],
+    );
+
+    // Callback saat satu sesi pengenalan selesai (misal onend di Mobile Chrome saat jeda napas)
+    // Simpan teks yang sudah terbentuk ke baseTextRef agar ucapan berikutnya menyambung
+    const handleSessionEnd = useCallback(() => {
+      if (editableTextRef.current) {
+        baseTextRef.current = editableTextRef.current.trim();
+      }
+    }, []);
+
     const {
-      text,
       isListening,
       error,
       startListening,
       stopListening,
       resetTranscript,
-    } = useSpeechRecognition("id-ID");
-
-    // Helper untuk menggabungkan teks dasar (sebelumnya) dengan hasil suara sesi saat ini
-    const getCombinedText = useCallback((base, newSpeech) => {
-      const cleanBase = (base || "").trim();
-      const cleanSpeech = (newSpeech || "").trim();
-      if (!cleanBase) return cleanSpeech;
-      if (!cleanSpeech) return cleanBase;
-      return `${cleanBase} ${cleanSpeech}`;
-    }, []);
-
-    // Sinkronisasi teks suara ke state editableText secara real-time
-    useEffect(() => {
-      if (text) {
-        setEditableText(getCombinedText(baseTextRef.current, text));
-      }
-    }, [text, getCombinedText]);
-
-    // Setiap kali mikrofon berhenti (baik via tombol jeda atau otomatis dari browser),
-    // simpan teks yang sudah terbentuk ke baseTextRef sebagai modal kalimat berikutnya.
-    useEffect(() => {
-      if (!isListening && editableText) {
-        baseTextRef.current = editableText.trim();
-      }
-    }, [isListening, editableText]);
+    } = useSpeechRecognition("id-ID", handleSpeech, handleSessionEnd);
 
     // Buka modal perekam suara dan otomatis mulai mendengarkan
     const openVoiceModal = useCallback(() => {
       resetTranscript();
       baseTextRef.current = "";
-      setEditableText("");
+      updateEditableText("");
       setIsModalOpen(true);
       setTimeout(() => {
         startListening();
       }, 300);
-    }, [resetTranscript, startListening]);
+    }, [resetTranscript, startListening, updateEditableText]);
 
     // Tutup modal perekam suara dan hentikan mikrofon
     const closeVoiceModal = useCallback(() => {
       stopListening();
       resetTranscript();
       baseTextRef.current = "";
-      setEditableText("");
+      updateEditableText("");
       setIsModalOpen(false);
-    }, [stopListening, resetTranscript]);
+    }, [stopListening, resetTranscript, updateEditableText]);
 
     // Expose openVoiceModal ke parent via ref (misal untuk tombol 'Bicara Ulang')
     useImperativeHandle(ref, () => ({
@@ -84,7 +83,7 @@ export const VoiceInput = forwardRef(
     // Reset suara yang terekam jika user salah kata
     const handleReset = () => {
       baseTextRef.current = "";
-      setEditableText("");
+      updateEditableText("");
       resetTranscript();
       setTimeout(() => {
         startListening();
@@ -94,10 +93,10 @@ export const VoiceInput = forwardRef(
     // Toggle jeda atau lanjut bicara
     const handleToggleListening = () => {
       if (isListening) {
-        baseTextRef.current = editableText.trim();
+        baseTextRef.current = editableTextRef.current.trim();
         stopListening();
       } else {
-        baseTextRef.current = editableText.trim();
+        baseTextRef.current = editableTextRef.current.trim();
         startListening();
       }
     };
@@ -105,7 +104,7 @@ export const VoiceInput = forwardRef(
     // Handler ketika user mengetik atau mengedit langsung teks di textarea
     const handleTextChange = (e) => {
       const newVal = e.target.value;
-      setEditableText(newVal);
+      updateEditableText(newVal);
       baseTextRef.current = newVal.trim();
       // Jeda otomatis jika sedang mendengarkan agar suara ketikan / ucapan tidak bentrok menimpa editan user
       if (isListening) {
@@ -115,7 +114,7 @@ export const VoiceInput = forwardRef(
 
     // Kirim transkrip ke backend untuk diproses Gemini AI
     const handleProcessWithAi = () => {
-      const finalTranscript = editableText.trim();
+      const finalTranscript = editableTextRef.current.trim();
       if (!finalTranscript) return;
 
       stopListening();
@@ -125,7 +124,7 @@ export const VoiceInput = forwardRef(
         onSpeechComplete(finalTranscript);
       }
       baseTextRef.current = "";
-      setEditableText("");
+      updateEditableText("");
     };
 
     return (

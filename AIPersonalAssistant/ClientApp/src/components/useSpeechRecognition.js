@@ -1,12 +1,26 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
-export const useSpeechRecognition = (language = "id-ID") => {
-  const [text, setText] = useState("");
+export const useSpeechRecognition = (
+  language = "id-ID",
+  onSpeech,
+  onSessionEnd,
+) => {
   const [isListening, setIsListening] = useState(false);
   const [error, setError] = useState(null);
   const recognitionRef = useRef(null);
-  const transcriptRef = useRef("");
   const isListeningRef = useRef(false);
+  const shouldListenRef = useRef(false);
+  const restartTimeoutRef = useRef(null);
+
+  const onSpeechRef = useRef(onSpeech);
+  useEffect(() => {
+    onSpeechRef.current = onSpeech;
+  }, [onSpeech]);
+
+  const onSessionEndRef = useRef(onSessionEnd);
+  useEffect(() => {
+    onSessionEndRef.current = onSessionEnd;
+  }, [onSessionEnd]);
 
   useEffect(() => {
     const SpeechRecognition =
@@ -29,37 +43,97 @@ export const useSpeechRecognition = (language = "id-ID") => {
       let interimTranscript = "";
 
       for (let i = 0; i < event.results.length; i++) {
-        const piece = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          finalTranscript += piece;
+        const result = event.results[i];
+        if (result.isFinal) {
+          finalTranscript += result[0].transcript + " ";
         } else {
-          interimTranscript += piece;
+          // Di Chrome Mobile / Android, hasil interim ditambahkan sebagai snapshot lengkap dari kalimat berjalan.
+          // Jangan gunakan += karena akan menduplikasi kata-kata. Ambil snapshot paling mutakhir.
+          interimTranscript = result[0].transcript;
         }
       }
 
-      const currentFull = (finalTranscript + " " + interimTranscript).trim();
-      transcriptRef.current = currentFull;
-      setText(currentFull);
+      const sessionFull = (finalTranscript + " " + interimTranscript)
+        .trim()
+        .replace(/\s+/g, " ");
+
+      if (onSpeechRef.current && sessionFull) {
+        onSpeechRef.current(sessionFull);
+      }
     };
 
     recognition.onerror = (event) => {
-      // "aborted" and "no-speech" are expected during normal user cancellations or pauses
-      if (event.error !== "no-speech" && event.error !== "aborted") {
-        console.warn("Speech recognition error:", event.error);
+      console.warn("Speech recognition error:", event.error);
+      if (
+        event.error === "not-allowed" ||
+        event.error === "service-not-allowed"
+      ) {
+        shouldListenRef.current = false;
+        setIsListening(false);
+        isListeningRef.current = false;
+        setError("Izin mikrofon ditolak atau tidak didukung di browser ini.");
+      } else if (event.error !== "no-speech" && event.error !== "aborted") {
         setError(event.error);
       }
-      setIsListening(false);
-      isListeningRef.current = false;
     };
 
     recognition.onend = () => {
-      setIsListening(false);
       isListeningRef.current = false;
+
+      // Beritahu consumer untuk commit teks sesi yang baru selesai
+      if (onSessionEndRef.current) {
+        onSessionEndRef.current();
+      }
+
+      // Jika user masih dalam mode mendengarkan (kasus Chrome Mobile yang sering memutus audio saat jeda napas),
+      // otomatis sambung kembali sesi perekaman tanpa mematikan status UI.
+      if (shouldListenRef.current) {
+        if (restartTimeoutRef.current) {
+          clearTimeout(restartTimeoutRef.current);
+        }
+        restartTimeoutRef.current = setTimeout(() => {
+          if (
+            shouldListenRef.current &&
+            recognitionRef.current &&
+            !isListeningRef.current
+          ) {
+            try {
+              recognitionRef.current.start();
+              setIsListening(true);
+              isListeningRef.current = true;
+            } catch (err) {
+              console.warn("Speech recognition auto-restart warning:", err);
+              setTimeout(() => {
+                if (
+                  shouldListenRef.current &&
+                  recognitionRef.current &&
+                  !isListeningRef.current
+                ) {
+                  try {
+                    recognitionRef.current.start();
+                    setIsListening(true);
+                    isListeningRef.current = true;
+                  } catch (e) {
+                    setIsListening(false);
+                    isListeningRef.current = false;
+                  }
+                }
+              }, 250);
+            }
+          }
+        }, 120);
+      } else {
+        setIsListening(false);
+      }
     };
 
     recognitionRef.current = recognition;
 
     return () => {
+      shouldListenRef.current = false;
+      if (restartTimeoutRef.current) {
+        clearTimeout(restartTimeoutRef.current);
+      }
       if (recognitionRef.current && isListeningRef.current) {
         try {
           recognitionRef.current.abort();
@@ -70,8 +144,7 @@ export const useSpeechRecognition = (language = "id-ID") => {
   }, [language]);
 
   const startListening = useCallback(() => {
-    setText("");
-    transcriptRef.current = "";
+    shouldListenRef.current = true;
     setError(null);
     if (recognitionRef.current && !isListeningRef.current) {
       try {
@@ -85,6 +158,10 @@ export const useSpeechRecognition = (language = "id-ID") => {
   }, []);
 
   const stopListening = useCallback(() => {
+    shouldListenRef.current = false;
+    if (restartTimeoutRef.current) {
+      clearTimeout(restartTimeoutRef.current);
+    }
     if (recognitionRef.current && isListeningRef.current) {
       try {
         recognitionRef.current.stop();
@@ -94,12 +171,13 @@ export const useSpeechRecognition = (language = "id-ID") => {
       setIsListening(false);
       isListeningRef.current = false;
     }
-    return transcriptRef.current;
   }, []);
 
   const resetTranscript = useCallback(() => {
-    setText("");
-    transcriptRef.current = "";
+    shouldListenRef.current = false;
+    if (restartTimeoutRef.current) {
+      clearTimeout(restartTimeoutRef.current);
+    }
     if (recognitionRef.current && isListeningRef.current) {
       try {
         recognitionRef.current.abort();
@@ -112,12 +190,10 @@ export const useSpeechRecognition = (language = "id-ID") => {
   }, []);
 
   return {
-    text,
     isListening,
     error,
     startListening,
     stopListening,
     resetTranscript,
-    latestText: transcriptRef.current,
   };
 };
