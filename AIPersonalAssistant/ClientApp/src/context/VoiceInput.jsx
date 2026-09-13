@@ -13,36 +13,33 @@ export const VoiceInput = forwardRef(
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editableText, setEditableText] = useState("");
 
-    // Memisahkan teks dasar dengan suara berjalan
     const baseTextRef = useRef("");
-    const liveSpeechRef = useRef("");
+    const interimTextRef = useRef("");
 
-    // Helper untuk menggabungkan teks dasar dan live audio tanpa duplikasi spasi
-    const renderFullText = (base, live) => {
-      const b = (base || "").trim();
-      const l = (live || "").trim();
-      if (b && l) return `${b} ${l}`;
-      return b || l || "";
+    // Helper render penggabungan teks permanen + preview kata yang sedang diucapkan
+    const syncDisplayText = () => {
+      const base = baseTextRef.current.trim();
+      const interim = interimTextRef.current.trim();
+      if (base && interim) {
+        setEditableText(`${base} ${interim}`);
+      } else {
+        setEditableText(base || interim || "");
+      }
     };
 
-    // Callback saat ada suara aktif masuk dari pengenal suara
-    const handleSpeech = useCallback((sessionTranscript) => {
-      liveSpeechRef.current = sessionTranscript;
-      setEditableText(
-        renderFullText(baseTextRef.current, liveSpeechRef.current),
-      );
+    // Dipanggil hanya saat satu kata/kalimat sudah final (dikunci)
+    const handleFinalChunk = useCallback((finalText) => {
+      if (!finalText) return;
+      const base = baseTextRef.current.trim();
+      baseTextRef.current = base ? `${base} ${finalText}` : finalText;
+      interimTextRef.current = "";
+      syncDisplayText();
     }, []);
 
-    // Callback saat sesi suara selesai/jeda: commit live text ke base text
-    const handleSessionEnd = useCallback(() => {
-      if (liveSpeechRef.current) {
-        baseTextRef.current = renderFullText(
-          baseTextRef.current,
-          liveSpeechRef.current,
-        );
-        liveSpeechRef.current = "";
-        setEditableText(baseTextRef.current);
-      }
+    // Dipanggil saat suara sedang mengalir (belum final)
+    const handleInterimChunk = useCallback((interimText) => {
+      interimTextRef.current = interimText;
+      syncDisplayText();
     }, []);
 
     const {
@@ -51,12 +48,12 @@ export const VoiceInput = forwardRef(
       startListening,
       stopListening,
       resetTranscript,
-    } = useSpeechRecognition("id-ID", handleSpeech, handleSessionEnd);
+    } = useSpeechRecognition("id-ID", handleFinalChunk, handleInterimChunk);
 
     const openVoiceModal = useCallback(() => {
       resetTranscript();
       baseTextRef.current = "";
-      liveSpeechRef.current = "";
+      interimTextRef.current = "";
       setEditableText("");
       setIsModalOpen(true);
       setTimeout(() => {
@@ -68,7 +65,7 @@ export const VoiceInput = forwardRef(
       stopListening();
       resetTranscript();
       baseTextRef.current = "";
-      liveSpeechRef.current = "";
+      interimTextRef.current = "";
       setEditableText("");
       setIsModalOpen(false);
     }, [stopListening, resetTranscript]);
@@ -81,7 +78,7 @@ export const VoiceInput = forwardRef(
 
     const handleReset = () => {
       baseTextRef.current = "";
-      liveSpeechRef.current = "";
+      interimTextRef.current = "";
       setEditableText("");
       resetTranscript();
       setTimeout(() => {
@@ -91,15 +88,6 @@ export const VoiceInput = forwardRef(
 
     const handleToggleListening = () => {
       if (isListening) {
-        // Kunci teks saat dijeda
-        if (liveSpeechRef.current) {
-          baseTextRef.current = renderFullText(
-            baseTextRef.current,
-            liveSpeechRef.current,
-          );
-          liveSpeechRef.current = "";
-          setEditableText(baseTextRef.current);
-        }
         stopListening();
       } else {
         startListening();
@@ -109,21 +97,16 @@ export const VoiceInput = forwardRef(
     const handleTextChange = (e) => {
       const val = e.target.value;
       baseTextRef.current = val;
-      liveSpeechRef.current = "";
+      interimTextRef.current = "";
       setEditableText(val);
 
-      // Jeda listening saat pengguna mengedit manual
       if (isListening) {
         stopListening();
       }
     };
 
     const handleProcessWithAi = () => {
-      // Pastikan semua teks terkunci sebelum kirim ke AI
-      const finalTranscript = renderFullText(
-        baseTextRef.current,
-        liveSpeechRef.current,
-      ).trim();
+      const finalTranscript = editableText.trim();
       if (!finalTranscript) return;
 
       stopListening();
@@ -134,7 +117,7 @@ export const VoiceInput = forwardRef(
       }
 
       baseTextRef.current = "";
-      liveSpeechRef.current = "";
+      interimTextRef.current = "";
       setEditableText("");
     };
 

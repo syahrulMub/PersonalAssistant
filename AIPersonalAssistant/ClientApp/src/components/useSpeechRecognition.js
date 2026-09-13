@@ -2,8 +2,8 @@ import { useState, useEffect, useRef, useCallback } from "react";
 
 export const useSpeechRecognition = (
   language = "id-ID",
-  onSpeech,
-  onSessionEnd,
+  onFinalChunk,
+  onInterimChunk,
 ) => {
   const [isListening, setIsListening] = useState(false);
   const [error, setError] = useState(null);
@@ -12,16 +12,16 @@ export const useSpeechRecognition = (
   const shouldListenRef = useRef(false);
   const restartTimerRef = useRef(null);
 
-  const onSpeechRef = useRef(onSpeech);
-  const onSessionEndRef = useRef(onSessionEnd);
+  const onFinalChunkRef = useRef(onFinalChunk);
+  const onInterimChunkRef = useRef(onInterimChunk);
 
   useEffect(() => {
-    onSpeechRef.current = onSpeech;
-  }, [onSpeech]);
+    onFinalChunkRef.current = onFinalChunk;
+  }, [onFinalChunk]);
 
   useEffect(() => {
-    onSessionEndRef.current = onSessionEnd;
-  }, [onSessionEnd]);
+    onInterimChunkRef.current = onInterimChunk;
+  }, [onInterimChunk]);
 
   useEffect(() => {
     const SpeechRecognition =
@@ -35,7 +35,8 @@ export const useSpeechRecognition = (
     }
 
     const recognition = new SpeechRecognition();
-    recognition.continuous = true;
+    // continuous = false mencegah bug duplikasi kata di Android Chrome
+    recognition.continuous = false;
     recognition.interimResults = true;
     recognition.lang = language;
 
@@ -47,22 +48,23 @@ export const useSpeechRecognition = (
       let finalTranscript = "";
       let interimTranscript = "";
 
-      // Rekonstruksi transkrip sesi aktif secara langsung tanpa akumulasi berulang
       for (let i = 0; i < event.results.length; i++) {
         const item = event.results[i][0]?.transcript || "";
         if (event.results[i].isFinal) {
-          finalTranscript += item + " ";
+          finalTranscript += item;
         } else {
           interimTranscript += item;
         }
       }
 
-      const sessionText = (finalTranscript + " " + interimTranscript)
-        .trim()
-        .replace(/\s+/g, " ");
+      // Kirim hasil final untuk dikunci ke base text
+      if (finalTranscript.trim() && onFinalChunkRef.current) {
+        onFinalChunkRef.current(finalTranscript.trim());
+      }
 
-      if (onSpeechRef.current && sessionText) {
-        onSpeechRef.current(sessionText);
+      // Kirim preview sementara saat pengguna sedang berbicara
+      if (onInterimChunkRef.current) {
+        onInterimChunkRef.current(interimTranscript.trim());
       }
     };
 
@@ -80,12 +82,12 @@ export const useSpeechRecognition = (
     };
 
     recognition.onend = () => {
-      // Simpan hasil sesi sebelumnya sebelum restart
-      if (onSessionEndRef.current) {
-        onSessionEndRef.current();
+      // Bersihkan preview interim saat satu hembusan kalimat selesai
+      if (onInterimChunkRef.current) {
+        onInterimChunkRef.current("");
       }
 
-      // Auto-restart jika masih dalam mode aktif mendengarkan (mengatasi auto-disconnect Chrome Mobile)
+      // Sambung otomatis ke kalimat berikutnya tanpa menduplikasi data lama
       if (shouldListenRef.current) {
         if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
         restartTimerRef.current = setTimeout(() => {
@@ -94,7 +96,7 @@ export const useSpeechRecognition = (
               recognitionRef.current.start();
             } catch {}
           }
-        }, 150);
+        }, 80);
       } else {
         setIsListening(false);
       }
