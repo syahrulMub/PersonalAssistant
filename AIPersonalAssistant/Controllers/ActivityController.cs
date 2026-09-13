@@ -37,7 +37,8 @@ public class ActivityController : ControllerBase
             if (pageSize < 1) pageSize = 5;
             if (pageSize > 100) pageSize = 100;
 
-            var totalCount = await _dbContext.ActivityLogs.CountAsync();
+            var totalCount = await _dbContext.ActivityLogs
+            .Where(x => x.UserId == userId).CountAsync();
 
             var items = await _dbContext.ActivityLogs
                 .Where(x => x.UserId == userId)

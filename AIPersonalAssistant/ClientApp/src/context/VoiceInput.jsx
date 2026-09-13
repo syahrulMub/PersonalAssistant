@@ -4,6 +4,7 @@ import React, {
   useImperativeHandle,
   forwardRef,
   useCallback,
+  useRef,
 } from "react";
 import { Modal, ModalHeader, ModalBody, ModalFooter } from "reactstrap";
 import { useSpeechRecognition } from "../components/useSpeechRecognition";
@@ -12,6 +13,8 @@ export const VoiceInput = forwardRef(
   ({ onSpeechComplete, isProcessing = false }, ref) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editableText, setEditableText] = useState("");
+    const baseTextRef = useRef("");
+
     const {
       text,
       isListening,
@@ -19,19 +22,36 @@ export const VoiceInput = forwardRef(
       startListening,
       stopListening,
       resetTranscript,
-      latestText,
     } = useSpeechRecognition("id-ID");
+
+    // Helper untuk menggabungkan teks dasar (sebelumnya) dengan hasil suara sesi saat ini
+    const getCombinedText = useCallback((base, newSpeech) => {
+      const cleanBase = (base || "").trim();
+      const cleanSpeech = (newSpeech || "").trim();
+      if (!cleanBase) return cleanSpeech;
+      if (!cleanSpeech) return cleanBase;
+      return `${cleanBase} ${cleanSpeech}`;
+    }, []);
 
     // Sinkronisasi teks suara ke state editableText secara real-time
     useEffect(() => {
       if (text) {
-        setEditableText(text);
+        setEditableText(getCombinedText(baseTextRef.current, text));
       }
-    }, [text]);
+    }, [text, getCombinedText]);
+
+    // Setiap kali mikrofon berhenti (baik via tombol jeda atau otomatis dari browser),
+    // simpan teks yang sudah terbentuk ke baseTextRef sebagai modal kalimat berikutnya.
+    useEffect(() => {
+      if (!isListening && editableText) {
+        baseTextRef.current = editableText.trim();
+      }
+    }, [isListening, editableText]);
 
     // Buka modal perekam suara dan otomatis mulai mendengarkan
     const openVoiceModal = useCallback(() => {
       resetTranscript();
+      baseTextRef.current = "";
       setEditableText("");
       setIsModalOpen(true);
       setTimeout(() => {
@@ -43,6 +63,7 @@ export const VoiceInput = forwardRef(
     const closeVoiceModal = useCallback(() => {
       stopListening();
       resetTranscript();
+      baseTextRef.current = "";
       setEditableText("");
       setIsModalOpen(false);
     }, [stopListening, resetTranscript]);
@@ -62,8 +83,9 @@ export const VoiceInput = forwardRef(
 
     // Reset suara yang terekam jika user salah kata
     const handleReset = () => {
-      resetTranscript();
+      baseTextRef.current = "";
       setEditableText("");
+      resetTranscript();
       setTimeout(() => {
         startListening();
       }, 150);
@@ -72,15 +94,28 @@ export const VoiceInput = forwardRef(
     // Toggle jeda atau lanjut bicara
     const handleToggleListening = () => {
       if (isListening) {
+        baseTextRef.current = editableText.trim();
         stopListening();
       } else {
+        baseTextRef.current = editableText.trim();
         startListening();
+      }
+    };
+
+    // Handler ketika user mengetik atau mengedit langsung teks di textarea
+    const handleTextChange = (e) => {
+      const newVal = e.target.value;
+      setEditableText(newVal);
+      baseTextRef.current = newVal.trim();
+      // Jeda otomatis jika sedang mendengarkan agar suara ketikan / ucapan tidak bentrok menimpa editan user
+      if (isListening) {
+        stopListening();
       }
     };
 
     // Kirim transkrip ke backend untuk diproses Gemini AI
     const handleProcessWithAi = () => {
-      const finalTranscript = (editableText || text || latestText).trim();
+      const finalTranscript = editableText.trim();
       if (!finalTranscript) return;
 
       stopListening();
@@ -89,7 +124,7 @@ export const VoiceInput = forwardRef(
       if (onSpeechComplete) {
         onSpeechComplete(finalTranscript);
       }
-      // Jangan panggil resetTranscript() di sini karena akan memutus IPC Web Speech API sebelum respon diterima.
+      baseTextRef.current = "";
       setEditableText("");
     };
 
@@ -162,7 +197,9 @@ export const VoiceInput = forwardRef(
                       DIJEDA / STOP
                     </span>
                     <span className="text-muted small">
-                      Klik "Lanjut Bicara" untuk meneruskan rekaman suara.
+                      {editableText
+                        ? "Mikrofon dijeda. Anda dapat mengedit teks di atas atau klik 'Lanjut Bicara' untuk meneruskan rekaman suara."
+                        : "Klik 'Lanjut Bicara' untuk mulai merekam suara."}
                     </span>
                   </>
                 )}
@@ -173,7 +210,7 @@ export const VoiceInput = forwardRef(
                 type="button"
                 className="btn btn-sm btn-outline-warning d-flex align-items-center gap-1"
                 onClick={handleReset}
-                disabled={!editableText && !text}
+                disabled={!editableText.trim()}
                 title="Hapus rekaman saat ini dan mulai bicara dari awal"
               >
                 <span>🔄</span>
@@ -187,7 +224,7 @@ export const VoiceInput = forwardRef(
                 className="form-control p-3 rounded shadow-sm"
                 rows={6}
                 value={editableText}
-                onChange={(e) => setEditableText(e.target.value)}
+                onChange={handleTextChange}
                 placeholder="🎙️ Ucapan Anda akan muncul di sini secara langsung. Anda juga bisa mengedit atau mengetik langsung di sini jika ada kata yang kurang pas..."
                 style={{
                   minHeight: "200px",
