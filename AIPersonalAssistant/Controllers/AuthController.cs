@@ -77,36 +77,4 @@ public class AuthController : ControllerBase
         var token = _tokenService.CreateToken(user);
         return Ok(new AuthResponse(token, user.FullName, user.Email, user.Role));
     }
-
-    [Authorize(Roles = "Admin")]
-    public async Task<IActionResult> GetUsers()
-    {
-        try
-        {
-            var users = await _context.Users.ToListAsync();
-            _logger.LogInformation("success get list of users");
-            return Ok(users);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError("error get list user");
-            return StatusCode(500, "Error get list user.");
-        }
-
-    }
-
-    [Authorize(Roles = "Admin")]
-    [HttpPost("approve/{userId}")]
-    public async Task<IActionResult> ApproveUser(int userId)
-    {
-        var user = await _context.Users.FindAsync(userId);
-        if (user == null) return NotFound(new { message = "User tidak ditemukan." });
-
-        user.IsApproved = true;
-        await _context.SaveChangesAsync();
-
-        return Ok(new { message = $"User {user.Email} berhasil di-approve." });
-    }
-
-
 }

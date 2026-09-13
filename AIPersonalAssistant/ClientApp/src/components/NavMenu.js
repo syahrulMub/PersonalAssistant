@@ -63,11 +63,22 @@ export function NavMenu() {
               </NavLink>
             </NavItem>
             {user?.role === "Admin" && (
-              <NavItem>
-                <NavLink tag={Link} className="text-dark" to="/logs">
-                  API Logs
-                </NavLink>
-              </NavItem>
+              <>
+                <NavItem>
+                  <NavLink tag={Link} className="text-dark" to="/logs">
+                    API Logs
+                  </NavLink>
+                </NavItem>
+                <NavItem>
+                  <NavLink
+                    tag={Link}
+                    className="text-dark"
+                    to="/userActivation"
+                  >
+                    user
+                  </NavLink>
+                </NavItem>
+              </>
             )}
 
             {user && (

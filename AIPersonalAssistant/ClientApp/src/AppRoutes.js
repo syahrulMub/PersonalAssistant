@@ -3,6 +3,7 @@ import { FetchData } from "./components/FetchData";
 import { Home } from "./components/Home";
 import { Activity } from "./components/Activity";
 import { ApiLogTracker } from "./components/ApiLogTracker";
+import { UserActivation } from "./components/UserActivation";
 import { Navigate } from "react-router-dom";
 import { AdminRoute } from "./components/AdminRoute";
 
@@ -32,6 +33,14 @@ const AppRoutes = [
     element: (
       <AdminRoute>
         <ApiLogTracker />
+      </AdminRoute>
+    ),
+  },
+  {
+    path: "/userActivation",
+    element: (
+      <AdminRoute>
+        <UserActivation />
       </AdminRoute>
     ),
   },
