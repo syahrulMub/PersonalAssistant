@@ -12,31 +12,22 @@ export const VoiceInput = forwardRef(
   ({ onSpeechComplete, isProcessing = false }, ref) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editableText, setEditableText] = useState("");
-    const editableTextRef = useRef("");
     const baseTextRef = useRef("");
 
-    const updateEditableText = useCallback((val) => {
-      editableTextRef.current = val;
-      setEditableText(val);
+    // Menggabungkan teks dasar yang sudah fix/diedit dengan ucapan yang baru masuk
+    const handleSpeech = useCallback((sessionTranscript) => {
+      const base = baseTextRef.current.trim();
+      const currentSpeech = (sessionTranscript || "").trim();
+      const combined = base ? `${base} ${currentSpeech}` : currentSpeech;
+      setEditableText(combined);
     }, []);
 
-    // Callback saat ada suara baru yang terdeteksi di sesi perekaman berjalan
-    const handleSpeech = useCallback(
-      (sessionTranscript) => {
-        const base = baseTextRef.current.trim();
-        const speech = (sessionTranscript || "").trim();
-        const combined = base ? `${base} ${speech}` : speech;
-        updateEditableText(combined);
-      },
-      [updateEditableText],
-    );
-
-    // Callback saat satu sesi pengenalan selesai (misal onend di Mobile Chrome saat jeda napas)
-    // Simpan teks yang sudah terbentuk ke baseTextRef agar ucapan berikutnya menyambung
+    // Mengunci teks saat mikrofon jeda/berhenti agar ucapan berikutnya menyambung di akhir
     const handleSessionEnd = useCallback(() => {
-      if (editableTextRef.current) {
-        baseTextRef.current = editableTextRef.current.trim();
-      }
+      setEditableText((prev) => {
+        baseTextRef.current = prev.trim();
+        return prev;
+      });
     }, []);
 
     const {
@@ -47,74 +38,62 @@ export const VoiceInput = forwardRef(
       resetTranscript,
     } = useSpeechRecognition("id-ID", handleSpeech, handleSessionEnd);
 
-    // Buka modal perekam suara dan otomatis mulai mendengarkan
     const openVoiceModal = useCallback(() => {
       resetTranscript();
       baseTextRef.current = "";
-      updateEditableText("");
+      setEditableText("");
       setIsModalOpen(true);
       setTimeout(() => {
         startListening();
-      }, 300);
-    }, [resetTranscript, startListening, updateEditableText]);
+      }, 250);
+    }, [resetTranscript, startListening]);
 
-    // Tutup modal perekam suara dan hentikan mikrofon
     const closeVoiceModal = useCallback(() => {
       stopListening();
       resetTranscript();
       baseTextRef.current = "";
-      updateEditableText("");
+      setEditableText("");
       setIsModalOpen(false);
-    }, [stopListening, resetTranscript, updateEditableText]);
+    }, [stopListening, resetTranscript]);
 
-    // Expose openVoiceModal ke parent via ref (misal untuk tombol 'Bicara Ulang')
     useImperativeHandle(ref, () => ({
-      startListening: () => {
-        openVoiceModal();
-      },
-      openVoiceModal: () => {
-        openVoiceModal();
-      },
-      closeVoiceModal: () => {
-        closeVoiceModal();
-      },
+      startListening: openVoiceModal,
+      openVoiceModal,
+      closeVoiceModal,
     }));
 
-    // Reset suara yang terekam jika user salah kata
     const handleReset = () => {
       baseTextRef.current = "";
-      updateEditableText("");
+      setEditableText("");
       resetTranscript();
       setTimeout(() => {
         startListening();
       }, 150);
     };
 
-    // Toggle jeda atau lanjut bicara
     const handleToggleListening = () => {
       if (isListening) {
-        baseTextRef.current = editableTextRef.current.trim();
+        baseTextRef.current = editableText.trim();
         stopListening();
       } else {
-        baseTextRef.current = editableTextRef.current.trim();
+        baseTextRef.current = editableText.trim();
         startListening();
       }
     };
 
-    // Handler ketika user mengetik atau mengedit langsung teks di textarea
     const handleTextChange = (e) => {
       const newVal = e.target.value;
-      updateEditableText(newVal);
+      setEditableText(newVal);
       baseTextRef.current = newVal.trim();
-      // Jeda otomatis jika sedang mendengarkan agar suara ketikan / ucapan tidak bentrok menimpa editan user
+
+      // Jeda otomatis jika user mulai mengetik manual
       if (isListening) {
         stopListening();
       }
     };
 
-    // Kirim transkrip ke backend untuk diproses Gemini AI
     const handleProcessWithAi = () => {
-      const finalTranscript = editableTextRef.current.trim();
+      const finalTranscript = editableText.trim();
       if (!finalTranscript) return;
 
       stopListening();
@@ -123,13 +102,13 @@ export const VoiceInput = forwardRef(
       if (onSpeechComplete) {
         onSpeechComplete(finalTranscript);
       }
+
       baseTextRef.current = "";
-      updateEditableText("");
+      setEditableText("");
     };
 
     return (
       <>
-        {/* Tombol Ringkas di UI: Cukup Tampilkan Bicara */}
         <button
           type="button"
           className="btn btn-outline-primary d-flex align-items-center gap-1 shadow-sm"
@@ -154,7 +133,6 @@ export const VoiceInput = forwardRef(
           )}
         </button>
 
-        {/* POPUP MODAL PEREKAM SUARA YANG DAPAT DIEDIT LANGSUNG */}
         <Modal
           isOpen={isModalOpen}
           toggle={closeVoiceModal}
@@ -169,15 +147,11 @@ export const VoiceInput = forwardRef(
           </ModalHeader>
 
           <ModalBody className="p-4">
-            {/* Status mikrofon dan tombol Reset */}
             <div className="d-flex justify-content-between align-items-center mb-3">
               <div className="d-flex align-items-center gap-2">
                 {isListening ? (
                   <>
-                    <span
-                      className="badge bg-danger d-inline-flex align-items-center gap-1 px-2 py-1"
-                      style={{ animation: "pulse 1.5s infinite" }}
-                    >
+                    <span className="badge bg-danger d-inline-flex align-items-center gap-1 px-2 py-1">
                       <span
                         className="spinner-grow spinner-grow-sm"
                         role="status"
@@ -197,40 +171,37 @@ export const VoiceInput = forwardRef(
                     </span>
                     <span className="text-muted small">
                       {editableText
-                        ? "Mikrofon dijeda. Anda dapat mengedit teks di atas atau klik 'Lanjut Bicara' untuk meneruskan rekaman suara."
+                        ? "Mikrofon dijeda. Anda dapat mengedit teks atau klik 'Lanjut Bicara'."
                         : "Klik 'Lanjut Bicara' untuk mulai merekam suara."}
                     </span>
                   </>
                 )}
               </div>
 
-              {/* Tombol Reset Suara jika ada salah kata */}
               <button
                 type="button"
                 className="btn btn-sm btn-outline-warning d-flex align-items-center gap-1"
                 onClick={handleReset}
                 disabled={!editableText.trim()}
-                title="Hapus rekaman saat ini dan mulai bicara dari awal"
+                title="Hapus rekaman saat ini dan mulai dari awal"
               >
                 <span>🔄</span>
                 <span>Reset Suara</span>
               </button>
             </div>
 
-            {/* Kotak Textarea Transkripsi yang Dapat Diedit Langsung */}
             <div className="mb-2">
               <textarea
                 className="form-control p-3 rounded shadow-sm"
                 rows={6}
                 value={editableText}
                 onChange={handleTextChange}
-                placeholder="🎙️ Ucapan Anda akan muncul di sini secara langsung. Anda juga bisa mengedit atau mengetik langsung di sini jika ada kata yang kurang pas..."
+                placeholder="🎙️ Ucapan Anda akan muncul di sini secara langsung. Anda juga bisa mengedit atau mengetik langsung jika ada kata yang kurang pas..."
                 style={{
                   minHeight: "200px",
                   maxHeight: "320px",
                   fontSize: "1.25rem",
                   lineHeight: "1.8",
-                  letterSpacing: "0.2px",
                   backgroundColor: isListening ? "#fffdfd" : "#ffffff",
                   borderColor: isListening ? "#dc3545" : "#ced4da",
                   boxShadow: isListening
@@ -240,14 +211,9 @@ export const VoiceInput = forwardRef(
               />
             </div>
 
-            {/* Petunjuk Edit & Hitungan Karakter */}
             <div className="d-flex justify-content-between align-items-center text-muted small px-1">
               <span>
-                ✍️{" "}
-                <em>
-                  Teks di atas dapat Anda edit/ketik langsung secara bebas jika
-                  ingin memperbaiki kata.
-                </em>
+                ✍️ <em>Teks di atas dapat diedit atau diketik langsung.</em>
               </span>
               <span>
                 {editableText ? `${editableText.length} karakter` : ""}
@@ -262,7 +228,6 @@ export const VoiceInput = forwardRef(
           </ModalBody>
 
           <ModalFooter className="d-flex justify-content-between bg-light">
-            {/* Tombol Jeda / Lanjut */}
             <button
               type="button"
               className={`btn d-inline-flex align-items-center gap-1 ${
@@ -287,7 +252,6 @@ export const VoiceInput = forwardRef(
                 className="btn btn-primary d-inline-flex align-items-center gap-2 px-3 shadow-sm"
                 onClick={handleProcessWithAi}
                 disabled={!editableText.trim() || isProcessing}
-                title="Kirim ke Gemini AI untuk dianalisis dan dimasukkan ke form"
               >
                 <span>✨</span>
                 <span>Proses dengan AI</span>

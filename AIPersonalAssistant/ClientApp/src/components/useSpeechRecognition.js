@@ -7,17 +7,19 @@ export const useSpeechRecognition = (
 ) => {
   const [isListening, setIsListening] = useState(false);
   const [error, setError] = useState(null);
+
   const recognitionRef = useRef(null);
-  const isListeningRef = useRef(false);
   const shouldListenRef = useRef(false);
-  const restartTimeoutRef = useRef(null);
+  const restartTimerRef = useRef(null);
+  const sessionFinalRef = useRef(""); // Menyimpan final text khusus di sesi aktif berjalan
 
   const onSpeechRef = useRef(onSpeech);
+  const onSessionEndRef = useRef(onSessionEnd);
+
   useEffect(() => {
     onSpeechRef.current = onSpeech;
   }, [onSpeech]);
 
-  const onSessionEndRef = useRef(onSessionEnd);
   useEffect(() => {
     onSessionEndRef.current = onSessionEnd;
   }, [onSessionEnd]);
@@ -28,7 +30,7 @@ export const useSpeechRecognition = (
 
     if (!SpeechRecognition) {
       setError(
-        "Browser tidak mendukung Web Speech API. Gunakan Google Chrome atau Edge.",
+        "Browser tidak mendukung Web Speech API. Silakan gunakan Google Chrome atau Microsoft Edge.",
       );
       return;
     }
@@ -38,39 +40,46 @@ export const useSpeechRecognition = (
     recognition.interimResults = true;
     recognition.lang = language;
 
+    recognition.onstart = () => {
+      sessionFinalRef.current = "";
+      setIsListening(true);
+    };
+
     recognition.onresult = (event) => {
-      let finalTranscript = "";
       let interimTranscript = "";
 
-      for (let i = 0; i < event.results.length; i++) {
+      // Mulai dari event.resultIndex untuk mencegah duplikasi token di Android & Desktop
+      for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
+        const transcript = result[0]?.transcript || "";
+
         if (result.isFinal) {
-          finalTranscript += result[0].transcript + " ";
+          sessionFinalRef.current += transcript + " ";
         } else {
-          // Di Chrome Mobile / Android, hasil interim ditambahkan sebagai snapshot lengkap dari kalimat berjalan.
-          // Jangan gunakan += karena akan menduplikasi kata-kata. Ambil snapshot paling mutakhir.
-          interimTranscript = result[0].transcript;
+          interimTranscript += transcript;
         }
       }
 
-      const sessionFull = (finalTranscript + " " + interimTranscript)
+      const fullSessionText = (
+        sessionFinalRef.current +
+        " " +
+        interimTranscript
+      )
         .trim()
         .replace(/\s+/g, " ");
 
-      if (onSpeechRef.current && sessionFull) {
-        onSpeechRef.current(sessionFull);
+      if (onSpeechRef.current && fullSessionText) {
+        onSpeechRef.current(fullSessionText);
       }
     };
 
     recognition.onerror = (event) => {
-      console.warn("Speech recognition error:", event.error);
       if (
         event.error === "not-allowed" ||
         event.error === "service-not-allowed"
       ) {
         shouldListenRef.current = false;
         setIsListening(false);
-        isListeningRef.current = false;
         setError("Izin mikrofon ditolak atau tidak didukung di browser ini.");
       } else if (event.error !== "no-speech" && event.error !== "aborted") {
         setError(event.error);
@@ -78,50 +87,25 @@ export const useSpeechRecognition = (
     };
 
     recognition.onend = () => {
-      isListeningRef.current = false;
-
-      // Beritahu consumer untuk commit teks sesi yang baru selesai
+      // Notifikasi ke consumer untuk mengunci teks sesi sebelumnya
       if (onSessionEndRef.current) {
         onSessionEndRef.current();
       }
 
-      // Jika user masih dalam mode mendengarkan (kasus Chrome Mobile yang sering memutus audio saat jeda napas),
-      // otomatis sambung kembali sesi perekaman tanpa mematikan status UI.
+      sessionFinalRef.current = "";
+
+      // Sambung otomatis jika user masih dalam mode mendengarkan (mengatasi auto-stop di Chrome Mobile)
       if (shouldListenRef.current) {
-        if (restartTimeoutRef.current) {
-          clearTimeout(restartTimeoutRef.current);
-        }
-        restartTimeoutRef.current = setTimeout(() => {
-          if (
-            shouldListenRef.current &&
-            recognitionRef.current &&
-            !isListeningRef.current
-          ) {
+        if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
+        restartTimerRef.current = setTimeout(() => {
+          if (shouldListenRef.current && recognitionRef.current) {
             try {
               recognitionRef.current.start();
-              setIsListening(true);
-              isListeningRef.current = true;
-            } catch (err) {
-              console.warn("Speech recognition auto-restart warning:", err);
-              setTimeout(() => {
-                if (
-                  shouldListenRef.current &&
-                  recognitionRef.current &&
-                  !isListeningRef.current
-                ) {
-                  try {
-                    recognitionRef.current.start();
-                    setIsListening(true);
-                    isListeningRef.current = true;
-                  } catch (e) {
-                    setIsListening(false);
-                    isListeningRef.current = false;
-                  }
-                }
-              }, 250);
+            } catch {
+              // Abaikan jika recognition sudah dalam status running
             }
           }
-        }, 120);
+        }, 200);
       } else {
         setIsListening(false);
       }
@@ -131,14 +115,11 @@ export const useSpeechRecognition = (
 
     return () => {
       shouldListenRef.current = false;
-      if (restartTimeoutRef.current) {
-        clearTimeout(restartTimeoutRef.current);
-      }
-      if (recognitionRef.current && isListeningRef.current) {
+      if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
+      if (recognitionRef.current) {
         try {
           recognitionRef.current.abort();
-        } catch (err) {}
-        isListeningRef.current = false;
+        } catch {}
       }
     };
   }, [language]);
@@ -146,46 +127,40 @@ export const useSpeechRecognition = (
   const startListening = useCallback(() => {
     shouldListenRef.current = true;
     setError(null);
-    if (recognitionRef.current && !isListeningRef.current) {
+    sessionFinalRef.current = "";
+
+    if (recognitionRef.current) {
       try {
         recognitionRef.current.start();
         setIsListening(true);
-        isListeningRef.current = true;
-      } catch (err) {
-        console.warn("Speech recognition start warning:", err);
+      } catch {
+        // Recognition mungkin sedang aktif
       }
     }
   }, []);
 
   const stopListening = useCallback(() => {
     shouldListenRef.current = false;
-    if (restartTimeoutRef.current) {
-      clearTimeout(restartTimeoutRef.current);
-    }
-    if (recognitionRef.current && isListeningRef.current) {
+    if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
+
+    if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
-      } catch (err) {
-        console.warn("Speech recognition stop warning:", err);
-      }
+      } catch {}
       setIsListening(false);
-      isListeningRef.current = false;
     }
   }, []);
 
   const resetTranscript = useCallback(() => {
     shouldListenRef.current = false;
-    if (restartTimeoutRef.current) {
-      clearTimeout(restartTimeoutRef.current);
-    }
-    if (recognitionRef.current && isListeningRef.current) {
+    sessionFinalRef.current = "";
+    if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
+
+    if (recognitionRef.current) {
       try {
         recognitionRef.current.abort();
-      } catch (err) {
-        console.warn("Speech recognition abort warning:", err);
-      }
+      } catch {}
       setIsListening(false);
-      isListeningRef.current = false;
     }
   }, []);
 
