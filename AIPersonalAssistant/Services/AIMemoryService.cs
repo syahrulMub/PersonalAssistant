@@ -23,7 +23,7 @@ public class AIMemoryService : IAIMemoryService
     {
         var thisDay = DateTime.UtcNow.Date;
         var activities = await _dbContext.ActivityLogs
-            .Where(a => a.UserId == userId && a.CreateAt >= thisDay.AddDays(-7) && a.CreateAt <= thisDay)
+            .Where(a => a.UserId == userId && a.CreateAt >= thisDay.AddDays(-1) && a.CreateAt <= thisDay)
             .Select(a => new { a.Id, a.Title, a.Description, a.CreateAt })
             .ToListAsync();
         var existingTopics = await _dbContext.AIMemories
