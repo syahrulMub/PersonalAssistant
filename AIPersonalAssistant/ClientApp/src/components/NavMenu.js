@@ -53,8 +53,8 @@ export function NavMenu() {
               </NavLink>
             </NavItem>
             <NavItem>
-              <NavLink tag={Link} className="text-dark" to="/fetch-data">
-                Fetch data
+              <NavLink tag={Link} className="text-dark" to="/ai-features">
+                Aktivasi Fitur AI
               </NavLink>
             </NavItem>
             <NavItem>

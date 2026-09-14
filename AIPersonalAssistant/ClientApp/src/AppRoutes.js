@@ -1,5 +1,5 @@
 import { Counter } from "./components/Counter";
-import { FetchData } from "./components/FetchData";
+import { AIFeatureActivation } from "./components/AIFeatureActivation";
 import { Home } from "./components/Home";
 import { Activity } from "./components/Activity";
 import { ApiLogTracker } from "./components/ApiLogTracker";
@@ -21,8 +21,12 @@ const AppRoutes = [
     element: <Counter />,
   },
   {
+    path: "/ai-features",
+    element: <AIFeatureActivation />,
+  },
+  {
     path: "/fetch-data",
-    element: <FetchData />,
+    element: <Navigate to="/ai-features" replace />,
   },
   {
     path: "/activity",

@@ -44,6 +44,16 @@ public class BackgroundReminderService : BackgroundService
         var targetWindow = DateTime.Now.AddMinutes(10);
         foreach (var user in listUser)
         {
+
+            var isFeatureEnabled = await dbContext.UserAIFeatures
+                .AnyAsync(uf => uf.UserId == user.Id && uf.FeatureId == 1 && uf.IsEnabled);
+
+            if (!isFeatureEnabled)
+            {
+                continue;
+            }
+
+
             var dueActivities = await dbContext.ActivityLogs
             .Where(a => a.ReminderTime > DateTime.MinValue && a.ReminderTime <= targetWindow && a.IsReminder && user.Id == a.UserId)
             .Take(10)
