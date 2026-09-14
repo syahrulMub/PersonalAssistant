@@ -223,39 +223,65 @@ public class AIMemoryService : IAIMemoryService
             });
         }
     }
-    private static string BuildExtractionPrompt(string rawActivitiesJson, string summaryKeyandSubject) =>
-        $@"Anda adalah AI Memory Extraction Engine. Ekstrak wawasan jangka panjang dari log aktivitas pengguna berikut.
+    private string BuildExtractionPrompt(string rawActivitiesJson, string existingTopicsCatalog) =>
+        $@"Anda adalah AI Memory Extraction Engine. Tugas Anda mengekstrak wawasan bernilai jangka panjang dari log aktivitas pengguna ke dalam struktur data memori yang kohesif.
 
-            [DAFTAR TOPIK / MEMORI YANG SUDAH AKTIF]
-            {summaryKeyandSubject}
-            Pedoman:
-            1. Abaikan aktivitas sekali lewat yang tidak berulang atau tidak penting.
-            2. Identifikasi pola kebiasaan, proyek, preferensi, atau keahlian.
-            3. Jika aktivitas hari ini relevan dengan topik yang SUDAH ADA di atas (misal: fitur 'voice to text' atau 'auth' adalah bagian dari AI Personal Assistant), WAJIB gunakan Subject & Key yang sama persis agar tidak terpecah. Buat Subject/Key baru HANYA jika topiknya benar-benar belum pernah ada.
-            4. Berikan output HANYA format JSON valid tanpa teks lain:
-            {{
-            ""memories"": [
-                {{
-                ""memoryType"": ""string"",
-                ""subject"": ""string"",
-                ""key"": ""string"",
-                ""value"": {{}},
-                ""source"": ""InferredFromActivity"",
-                ""confidence"": 0.0,
-                ""evidence"": [
-                    {{
-                    ""sourceId"": 0,
-                    ""sourceType"": ""Activity"",
-                    ""observationValue"": ""string""
-                    }}
-                ]
-                }}
-            ]
-            }}
+[DAFTAR TOPIK / MEMORI YANG SUDAH AKTIF]
+{existingTopicsCatalog}
 
-            [AKTIVITAS HARI INI]
-            {rawActivitiesJson}";
-    private string BuildConsolidationPrompt(string candidatesJson, string existingMemoriesJson) =>
+PRINSIP EVALUASI NILAI MEMORI:
+Ekstrak menjadi entitas memori jika aktivitas memenuhi salah satu kriteria nilai berikut:
+1. **Siklus Periodik & Mitigasi Risiko (Periodic Cycles & Preservation)**:
+   - Tindakan berkala yang memiliki interval waktu berulang dan berisiko menimbulkan dampak negatif jika terlupakan (pemeliharaan kondisi, siklus kepatuhan, atau peninjauan preventif).
+2. **Kondisi & Profil Berkelanjutan (Sustained State & Context)**:
+   - Informasi mengenai peran primer, transisi fase hidup, atau status fungsional yang memengaruhi lanskap keseharian pengguna.
+3. **Inisiatif & Milestone Bertahap (Progressive Initiatives)**:
+   - Upaya yang membutuhkan rangkaian proses bertingkat dan waktu berkelanjutan untuk mencapai target tertentu.
+4. **Rutinitas & Kesejahteraan Berulang (Behavioral Routines & Wellness)**:
+   - Pola aktivitas fisik, mental, atau kebiasaan terstruktur yang mencerminkan keterlibatan berkala.
+5. **Preferensi & Batasan Operasional (Preferences & Constraints)**:
+   - Kecenderungan pilihan instrumen, metodologi kerja, atau batasan personal yang konsisten.
+
+PENGECUALIAN / ABAIKAN (TRANSIENT NOISE):
+- Abaikan transaksi atau interaksi kasual sekali lewat yang tidak membawa dampak risiko jangka panjang jika dilupakan, serta tidak memiliki keterkaitan dengan inisiatif, status, atau kebiasaan terstruktur.
+
+ATURAN STATUS & DERAJAT KEYAKINAN (CONFIDENCE):
+- **Aktivitas Faktual (Telah Terjadi)**: Berikan confidence tinggi (0.8 - 1.0) dan tentukan status operasional 'Completed' atau 'Ongoing'.
+- **Rencana / Pengingat / Komitmen Masa Depan**: Berikan confidence terukur (0.6 - 0.75), tentukan status operasional 'Planned' atau 'Scheduled', dan catat target proyeksi waktunya.
+- **Konsistensi Topik**: Jika aktivitas relevan dengan daftar topik aktif di atas, WAJIB gunakan Subject dan Key yang sama persis untuk mencegah fragmentasi data.
+
+FORMAT OUTPUT:
+Wajib memberikan output HANYA format JSON valid tanpa blok markdown atau teks tambahan:
+{{
+  ""memories"": [
+    {{
+      ""memoryType"": ""Cyclic"" | ""State"" | ""Project"" | ""Routine"" | ""Preference"",
+      ""subject"": ""string (Domain/Area Utama)"",
+      ""key"": ""string (Kunci Topik Spesifik)"",
+      ""value"": {{
+         ""currentStatus"": ""Completed"" | ""Ongoing"" | ""Planned"" | ""Scheduled"",
+         ""details"": ""string ringkasan fakta/progres"",
+         ""lastExecutedAt"": ""YYYY-MM-DD (jika faktual telah terjadi)"",
+         ""nextProjectedAt"": ""YYYY-MM-DD (jika terdapat rencana/estimasi jadwal berikutnya)"",
+         ""cycleInterval"": ""string estimasi ritme jika relevan (misal: harian, mingguan, bulanan, kuartalan)""
+      }},
+      ""source"": ""InferredFromActivity"",
+      ""confidence"": 0.0,
+      ""evidence"": [
+        {{
+          ""sourceId"": 0,
+          ""sourceType"": ""Activity"",
+          ""observationValue"": ""string isi log aktivitas asli""
+        }}
+      ]
+    }}
+  ]
+}}
+
+[LOG AKTIVITAS PENGGUNA]
+{rawActivitiesJson}";
+
+    private static string BuildConsolidationPrompt(string candidatesJson, string existingMemoriesJson) =>
         $@"Anda adalah AI Memory Consolidation Engine. Tugas Anda mengevaluasi kandidat memori baru terhadap memori lama pengguna untuk mencegah fragmentasi dan duplikasi data.
 
             ATURAN PENGAMBILAN KEPUTUSAN (ACTION):
