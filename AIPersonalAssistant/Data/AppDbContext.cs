@@ -13,6 +13,8 @@ public class AppDbContext : DbContext
     public DbSet<User> Users { get; set; }
     public DbSet<AIFeature> AIFeatures { get; set; }
     public DbSet<UserAIFeature> UserAIFeatures { get; set; }
+    public DbSet<AIMemory> AIMemories { get; set; }
+    public DbSet<AIMemoryObservation> AIMemoryObservations { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -48,6 +50,47 @@ public class AppDbContext : DbContext
             .HasOne(uf => uf.AIFeature)
             .WithMany(f => f.UserAIFeatures)
             .HasForeignKey(uf => uf.FeatureId);
+
+        modelBuilder.Entity<AIMemory>(entity =>
+        {
+            entity.ToTable("AIMemories");
+
+            entity.HasKey(m => m.Id);
+            entity.HasOne(m => m.user)
+                  .WithMany()
+                  .HasForeignKey(m => m.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(m => m.Observations)
+                  .WithOne(o => o.AIMemory)
+                  .HasForeignKey(o => o.AIMemoryId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(m => new { m.UserId, m.Status });
+            entity.HasIndex(m => new { m.UserId, m.Key });
+            entity.HasIndex(m => new { m.UserId, m.Subject });
+        });
+
+        // ==========================================
+        // 2. Konfigurasi AIMemoryObservation
+        // ==========================================
+        modelBuilder.Entity<AIMemoryObservation>(entity =>
+        {
+            entity.ToTable("AIMemoryObservations");
+
+            entity.HasKey(o => o.Id);
+
+            // Relasi: User 1 -> Many AIMemoryObservation
+            // Gunakan Restrict agar tidak terjadi konflik multiple cascade paths di EF Core
+            entity.HasOne(o => o.User)
+                  .WithMany()
+                  .HasForeignKey(o => o.UserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            // Indeks untuk relasi FK
+            entity.HasIndex(o => o.AIMemoryId);
+            entity.HasIndex(o => o.UserId);
+        });
     }
 
 }

@@ -28,102 +28,262 @@ public class AIGeminiService
         _apiLogService = apiLogService;
     }
 
-    public async Task<string> ExecuteGeminiApi(string prompt, string feature)
+    public async Task<string> ExecuteGeminiApi(string prompt, string feature, CancellationToken cancellationToken = default)
     {
-        string? keyFeature = _configuration[$"Gemini:{feature}"];
+        string? keyFeature = _configuration[$"Gemini:{feature}"] ?? _configuration["Gemini:ApiKey"];
         if (string.IsNullOrWhiteSpace(keyFeature))
         {
-            throw new InvalidOperationException("Gemini API key is not configured");
+            throw new InvalidOperationException($"Gemini API key for feature '{feature}' is not configured.");
         }
 
-        var url = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key={keyFeature}";
-        var safeUrlForLog = url.Replace(keyFeature ?? string.Empty, "***REDACTED***");
+        // Ambil daftar model dari appsettings.json (dengan fallback default jika konfigurasi kosong)
+        var candidateModels = _configuration.GetSection("Gemini:CandidateModels").Get<string[]>()
+            ?? new[] { "gemini-3.5-flash", "gemini-3.5-flash-lite" };
+
         var payload = new
         {
             contents = new[]
             {
-                new
+            new
+            {
+                parts = new[]
                 {
-                    parts = new[]
+                    new { text = prompt }
+                }
+            }
+        }
+        };
+
+        var jsonPayload = JsonSerializer.Serialize(payload);
+        string lastErrorMessage = "Tidak ada model yang berhasil dieksekusi.";
+
+        foreach (var modelName in candidateModels)
+        {
+            if (string.IsNullOrWhiteSpace(modelName)) continue;
+
+            var cleanModel = modelName.Replace("models/", "").Trim();
+            var url = $"https://generativelanguage.googleapis.com/v1beta/models/{cleanModel}:generateContent?key={keyFeature}";
+            var safeUrlForLog = url.Replace(keyFeature, "***REDACTED***");
+
+            _logger.LogInformation("Mencoba eksekusi text dengan model: {Model}", cleanModel);
+            _apiLogService.LogThirdParty("Gemini", safeUrlForLog, "POST", null, $"Req text model {cleanModel} started.", jsonPayload, null, "AIGeminiService", "ExecuteGeminiApi");
+
+            HttpResponseMessage? response = null;
+
+            // Retry maksimal 2x per model jika terjadi kendala sementara (429/503)
+            for (int attempt = 1; attempt <= 2; attempt++)
+            {
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                linkedCts.CancelAfter(TimeSpan.FromSeconds(30));
+
+                try
+                {
+                    var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+                    response = await _httpClient.PostAsync(url, content, linkedCts.Token);
+
+                    if (response.IsSuccessStatusCode)
                     {
-                        new { text = prompt }
+                        break;
+                    }
+
+                    // Jika error bukan rate-limit atau server overload (misal 400 Bad Request/404), stop retry model ini
+                    if ((int)response.StatusCode != 429 && (int)response.StatusCode != 503)
+                    {
+                        break;
+                    }
+
+                    _logger.LogWarning("Model {Model} merespons {Status}. Menunggu 5 detik sebelum retry...", cleanModel, response.StatusCode);
+                    await Task.Delay(TimeSpan.FromSeconds(5), linkedCts.Token);
+                }
+                catch (Exception ex) when (ex is HttpRequestException || ex is OperationCanceledException)
+                {
+                    _logger.LogWarning("Model {Model} timeout/gangguan jaringan: {Msg}", cleanModel, ex.Message);
+                    if (attempt < 2)
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(4), cancellationToken);
                     }
                 }
             }
-        };
-        var jsonPayload = JsonSerializer.Serialize(payload);
-        HttpResponseMessage? response = null;
 
-        _apiLogService.LogThirdParty("Gemini", safeUrlForLog, "POST", null, "Gemini request started.", jsonPayload, null, "AIGeminiService", "ExecuteGeminiApi");
-
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-
-        for (int i = 0; i < 3; i++)
-        {
-            var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
-            try
+            // Jika berhasil: parse teks dan langsung return (membatalkan model berikutnya)
+            if (response != null && response.IsSuccessStatusCode)
             {
-                response = await _httpClient.PostAsync(url, content, cts.Token);
+                var responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
+                _apiLogService.LogThirdParty("Gemini", safeUrlForLog, "POST", (int)response.StatusCode, $"Success with {cleanModel}", jsonPayload, responseContent, "AIGeminiService", "ExecuteGeminiApi");
 
-                if (response.IsSuccessStatusCode || ((int)response.StatusCode != 503 && (int)response.StatusCode != 429))
+                using var document = JsonDocument.Parse(responseContent);
+                try
                 {
-                    break;
+                    var parts = document.RootElement
+                        .GetProperty("candidates")[0]
+                        .GetProperty("content")
+                        .GetProperty("parts");
+
+                    var result = new StringBuilder();
+                    foreach (var part in parts.EnumerateArray())
+                    {
+                        if (part.TryGetProperty("text", out var textElement))
+                        {
+                            result.Append(textElement.GetString());
+                        }
+                    }
+
+                    return result.ToString();
+                }
+                catch (Exception ex)
+                {
+                    _apiLogService.LogThirdParty("Gemini", safeUrlForLog, "POST", (int)response.StatusCode, "Gemini parsing failed.", jsonPayload, responseContent, "AIGeminiService", "ExecuteGeminiApi");
+                    throw new InvalidOperationException("Failed to parse text response from Gemini API.", ex);
                 }
             }
-            catch (OperationCanceledException)
+
+            // Catat error jika model gagal dan lanjut ke model berikutnya
+            if (response != null)
             {
-                throw new TimeoutException("Gemini API request timed out after 15 seconds.");
+                lastErrorMessage = await response.Content.ReadAsStringAsync(cancellationToken);
+                _apiLogService.LogThirdParty("Gemini", safeUrlForLog, "POST", (int)response.StatusCode, $"Model {cleanModel} failed.", jsonPayload, lastErrorMessage, "AIGeminiService", "ExecuteGeminiApi");
             }
 
-            try
-            {
-                await Task.Delay(1000, cts.Token);
-            }
-            catch (OperationCanceledException)
-            {
-                throw new TimeoutException("Gemini API request timed out.");
-            }
+            _logger.LogWarning("Model {Model} gagal. Mencoba model berikutnya...", cleanModel);
+            await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
         }
 
-        if (response == null || !response.IsSuccessStatusCode)
-        {
-            var errorContent = response != null
-                ? await response.Content.ReadAsStringAsync()
-                : "No response from server";
-
-            _apiLogService.LogThirdParty("Gemini", safeUrlForLog, "POST", (int?)response?.StatusCode, "Gemini request failed.", jsonPayload, errorContent, "AIGeminiService", "ExecuteGeminiApi");
-
-            throw new InvalidOperationException($"Gemini API returned {response?.StatusCode}: {errorContent}");
-        }
-
-        var responseContent = await response.Content.ReadAsStringAsync();
-        _apiLogService.LogThirdParty("Gemini", safeUrlForLog, "POST", (int?)response.StatusCode, "Gemini response received.", jsonPayload, responseContent, "AIGeminiService", "ExecuteGeminiApi");
-
-        using var document = JsonDocument.Parse(responseContent);
-
-        try
-        {
-            var parts = document.RootElement
-                .GetProperty("candidates")[0]
-                .GetProperty("content")
-                .GetProperty("parts");
-            var result = new StringBuilder();
-            foreach (var part in parts.EnumerateArray())
-            {
-                if (part.TryGetProperty("text", out var textElement))
-                {
-                    result.Append(textElement.GetString());
-                }
-            }
-            return result.ToString();
-        }
-        catch (Exception ex)
-        {
-            _apiLogService.LogThirdParty("Gemini", safeUrlForLog, "POST", (int?)response.StatusCode, "Gemini response parsing failed.", jsonPayload, responseContent, "AIGeminiService", "ExecuteGeminiApi");
-            throw new InvalidOperationException("Failed to parse response from Gemini API.", ex);
-        }
+        throw new InvalidOperationException($"Semua kandidat model Gemini gagal dieksekusi. Error terakhir: {lastErrorMessage}");
     }
 
+    public async Task<string> ExecuteGeminiJsonApi(string prompt, string feature = "AIMemoryCompiler", CancellationToken cancellationToken = default)
+    {
+        string? keyFeature = _configuration[$"Gemini:{feature}"] ?? _configuration["Gemini:ApiKeyAIMemoryCompiler"];
+        if (string.IsNullOrWhiteSpace(keyFeature))
+        {
+            throw new InvalidOperationException($"Gemini API key for feature '{feature}' is not configured.");
+        }
+
+        var candidateModels = new[]
+        {
+        "gemini-3.5-flash",
+        "gemini-3.6-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-flash-lite-latest"
+    };
+
+        var payload = new
+        {
+            contents = new[]
+            {
+            new
+            {
+                parts = new[]
+                {
+                    new { text = prompt }
+                }
+            }
+        },
+            generationConfig = new
+            {
+                responseMimeType = "application/json",
+                temperature = 0.1
+            }
+        };
+
+        var jsonPayload = JsonSerializer.Serialize(payload);
+        string lastErrorMessage = "Tidak ada model yang dapat dihubungi.";
+
+        foreach (var modelName in candidateModels)
+        {
+            if (string.IsNullOrWhiteSpace(modelName)) continue;
+
+            var cleanModel = modelName.Replace("models/", "").Trim();
+            var url = $"https://generativelanguage.googleapis.com/v1beta/models/{cleanModel}:generateContent?key={keyFeature}";
+            var safeUrlForLog = url.Replace(keyFeature, "***REDACTED***");
+
+            _logger.LogInformation("Mencoba request AI Memory dengan model: {Model}", cleanModel);
+            _apiLogService.LogThirdParty(provider: "Gemini", safeUrlForLog, "POST", null, $"Req model {cleanModel} started.", jsonPayload, null, "AIGeminiService", "ExecuteGeminiJsonApi");
+
+            HttpResponseMessage? response = null;
+
+            // Retry per model (maksimal 2 kali percobaan per model)
+            for (int attempt = 1; attempt <= 2; attempt++)
+            {
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                linkedCts.CancelAfter(TimeSpan.FromSeconds(45));
+
+                try
+                {
+                    var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+                    response = await _httpClient.PostAsync(url, content, linkedCts.Token);
+
+                    // Jika sukses, langsung keluar dari loop retry
+                    if (response.IsSuccessStatusCode)
+                    {
+                        break;
+                    }
+
+                    // Jika error selain 429 dan 503 (misal 404 Not Found), jangan retry model ini
+                    if ((int)response.StatusCode != 429 && (int)response.StatusCode != 503)
+                    {
+                        break;
+                    }
+
+                    _logger.LogWarning("Model {Model} mengembalikan status {Status}. Menunggu jeda retry...", cleanModel, response.StatusCode);
+                    await Task.Delay(TimeSpan.FromSeconds(5), linkedCts.Token);
+                }
+                catch (Exception ex) when (ex is HttpRequestException || ex is OperationCanceledException)
+                {
+                    _logger.LogWarning("Model {Model} kendala jaringan/timeout: {Msg}", cleanModel, ex.Message);
+                    if (attempt < 2)
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
+                    }
+                }
+            }
+
+            // JIKA SUKSES: Langsung parse dan RETURN (Otomatis membatalkan sisa model lain)
+            if (response != null && response.IsSuccessStatusCode)
+            {
+                var responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
+                _apiLogService.LogThirdParty("Gemini", safeUrlForLog, "POST", (int)response.StatusCode, $"Success with {cleanModel}", jsonPayload, responseContent, "AIGeminiService", "ExecuteGeminiJsonApi");
+
+                using var document = JsonDocument.Parse(responseContent);
+                try
+                {
+                    var parts = document.RootElement
+                        .GetProperty("candidates")[0]
+                        .GetProperty("content")
+                        .GetProperty("parts");
+
+                    var result = new StringBuilder();
+                    foreach (var part in parts.EnumerateArray())
+                    {
+                        if (part.TryGetProperty("text", out var textElement))
+                        {
+                            result.Append(textElement.GetString());
+                        }
+                    }
+
+                    return CleanMarkdownBlock(result.ToString());
+                }
+                catch (Exception ex)
+                {
+                    _apiLogService.LogThirdParty("Gemini", safeUrlForLog, "POST", (int)response.StatusCode, "Gemini JSON parsing failed.", jsonPayload, responseContent, "AIGeminiService", "ExecuteGeminiJsonApi");
+                    throw new InvalidOperationException("Failed to parse response from Gemini API.", ex);
+                }
+            }
+
+            // JIKA GAGAL: Catat error dan biarkan loop berlanjut ke model berikutnya
+            if (response != null)
+            {
+                lastErrorMessage = await response.Content.ReadAsStringAsync(cancellationToken);
+                _apiLogService.LogThirdParty("Gemini", safeUrlForLog, "POST", (int)response.StatusCode, $"Model {cleanModel} failed.", jsonPayload, lastErrorMessage, "AIGeminiService", "ExecuteGeminiJsonApi");
+            }
+
+            _logger.LogWarning("Model {Model} gagal. Mencoba model berikutnya...", cleanModel);
+            await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
+        }
+
+        // Jika semua model dalam list telah dicoba dan seluruhnya gagal
+        throw new InvalidOperationException($"Semua kandidat model Gemini gagal dieksekusi. Detail error terakhir: {lastErrorMessage}");
+    }
     public async Task<CreateActivityDto> ParseActivityFromSpeechAsync(string speechText, DateTime clientReferenceTime)
     {
         if (string.IsNullOrWhiteSpace(speechText))
@@ -209,5 +369,24 @@ Format JSON wajib:
                 RemindAt = null
             };
         }
+    }
+    private static string CleanMarkdownBlock(string rawText)
+    {
+        var text = rawText.Trim();
+        if (text.StartsWith("```json", StringComparison.OrdinalIgnoreCase))
+        {
+            text = text.Substring(7);
+        }
+        else if (text.StartsWith("```"))
+        {
+            text = text.Substring(3);
+        }
+
+        if (text.EndsWith("```"))
+        {
+            text = text.Substring(0, text.Length - 3);
+        }
+
+        return text.Trim();
     }
 }

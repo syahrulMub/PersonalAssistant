@@ -3,6 +3,7 @@ using AIPersonalAssistant.Data;
 using AIPersonalAssistant.DTOs;
 using AIPersonalAssistant.EmailServices;
 using AIPersonalAssistant.Models;
+using AIPersonalAssistant.Services.Interface;
 using Microsoft.EntityFrameworkCore;
 using Org.BouncyCastle.Crypto.Prng;
 
@@ -16,74 +17,105 @@ public class SchedulerMethod
     private readonly AIGeminiService _aiService;
     private readonly AppDbContext _dbContext;
     private readonly AiRecapService _aiRecapService;
+    private readonly IAIMemoryService _aiMemoryService;
 
-    public SchedulerMethod(ILogger<SchedulerMethod> logger, IEmailSevice emailService, AIGeminiService aiService, AppDbContext dbContext, AiRecapService aiRecapService)
+    public SchedulerMethod(ILogger<SchedulerMethod> logger, IEmailSevice emailService, AIGeminiService aiService, AppDbContext dbContext, AiRecapService aiRecapService, IAIMemoryService aIMemoryService)
     {
         _logger = logger;
         _emailService = emailService;
         _aiService = aiService;
         _dbContext = dbContext;
         _aiRecapService = aiRecapService;
+        _aiMemoryService = aIMemoryService;
     }
 
     public async Task GenerateNightSummaryAsync()
     {
-        var treedayago = DateTime.UtcNow.AddDays(-3);
+        var targetDate = DateTime.UtcNow.Date;
+        var startOfToday = targetDate;
+        var endOfToday = startOfToday.AddDays(1).AddTicks(-1);
+        var threeDaysAgo = startOfToday.AddDays(-2); // Jendela 3 hari (kemarin lusa s/d hari ini)
+
         var listUser = await _dbContext.Users.ToListAsync();
+
         foreach (var user in listUser)
         {
             var isFeatureEnabled = await _dbContext.UserAIFeatures
-    .AnyAsync(uf => uf.UserId == user.Id && uf.FeatureId == 3 && uf.IsEnabled);
+                .AnyAsync(uf => uf.UserId == user.Id && uf.FeatureId == 3 && uf.IsEnabled);
 
-            if (!isFeatureEnabled)
-            {
-                continue;
-            }
-            var logs = await _dbContext.ActivityLogs
-            .Where(a => a.CreateAt.Date <= DateTime.Now.Date && a.CreateAt.Date >= treedayago.Date)
-            .Where(x => x.UserId == user.Id)
-            .OrderBy(a => a.ReminderTime)
-            .ToListAsync();
-            var activitiesText = string.Join("\n", logs.Select(l => $"- {l.Title} {l.Description} dibuat pada {l.CreateAt}"));
+            if (!isFeatureEnabled) continue;
 
+            // 1. Ambil memori aktif dalam rentang 3 hari terakhir
+            var recentMemories = await _dbContext.AIMemories
+                .Where(m => m.UserId == user.Id
+                         && m.Status == "Active"
+                         && m.LastObservedAt >= threeDaysAgo)
+                .OrderByDescending(m => m.LastObservedAt)
+                .ToListAsync();
+
+            // Pisahkan memori yang disentuh hari ini vs konteks hari sebelumnya
+            var memoriesToday = recentMemories
+                .Where(m => m.LastObservedAt >= startOfToday && m.LastObservedAt <= endOfToday)
+                .ToList();
+
+            var previousMemories = recentMemories
+                .Where(m => m.LastObservedAt < startOfToday)
+                .ToList();
+
+            var todayText = memoriesToday.Any()
+                ? string.Join("\n", memoriesToday.Select(m => $"- [{m.MemoryType}] {m.Subject} ({m.Key}): {m.ValueJson}"))
+                : "(Tidak ada aktivitas baru yang dicatat hari ini / Hari Istirahat)";
+
+            var contextText = previousMemories.Any()
+                ? string.Join("\n", previousMemories.Select(m => $"- [{m.MemoryType}] {m.Subject}: {m.ValueJson}"))
+                : "(Tidak ada konteks proyek sebelumnya)";
+
+            // 2. Prompt adaptif
             string prompt = $@"
-                        Kamu adalah asisten pribadi pintar, suportif, dan reflektif.
-                        Tugasmu adalah menganalisis seluruh aktivitas user hari ini untuk memberikan evaluasi penutup hari, rasa puas atas usaha yang telah dilakukan, serta ketenangan sebelum beristirahat.
+Kamu adalah asisten pribadi pintar, empatik, dan suportif.
+Tugasmu adalah memberikan refleksi penutup hari untuk pengguna berdasarkan data memori berikut.
 
-                        Daftar Aktivitas Hari Ini:
-                        {activitiesText}
+[AKTIVITAS & PROGRES HARI INI]
+{todayText}
 
-                        Instruksi Output:
-                        Kembalikan respon HANYA berupa JSON valid tanpa blok markdown (tanpa ```json ... ```) dan tanpa teks pembuka/penutup apapun.
+[KONTEKS PROYEK/KEBIASAAN BEBERAPA HARI TERAKHIR]
+{contextText}
 
-                        Format JSON wajib:
-                        {{
-                        ""summaryText"": ""Ulasan reflektif dan hangat mengenai pencapaian serta apa saja yang berhasil diselesaikan user hari ini."",
-                        ""positiveAffirmations"": ""Apresiasi tulus atas kerja keras user hari ini, validasi rasa lelahnya, dan kata penenang agar user merasa puas serta siap beristirahat."",
-                        ""actionableInsights"": ""1-2 evaluasi santai atau catatan prioritas yang bisa disiapkan untuk esok hari agar tidur lebih tenang tanpa beban pikiran.""
-                        }}";
+PEDOMAN NADA & EVALUASI:
+1. JIKA ADA AKTIVITAS HARI INI: Fokus apresiasi dan evaluasi pencapaian hari ini, kaitkan dengan progres proyek berjalan.
+2. JIKA HARI INI KOSONG (REST DAY): Validasi hari ini sebagai hari istirahat/pemulihan energi yang wajar. Hubungkan dengan beban kerja dari konteks proyek beberapa hari terakhir agar pengguna merasa tenang dan tidak terbebani pikiran.
 
-            var rawResponse = await _aiService.ExecuteGeminiApi(prompt, "ApiKeyRecapDaily");
-            var cleanJson = rawResponse.Replace("```json", "").Replace("```", "").Trim();
-            _logger.LogInformation("Generated JSON: {Json}", cleanJson);
-            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            var result = JsonSerializer.Deserialize<DailySummaryAiDto>(cleanJson, options);
-            if (result == null)
+FORMAT OUTPUT (Wajib JSON valid murni tanpa markdown):
+{{
+  ""summaryText"": ""Ulasan reflektif mengenai hari ini (atau apresiasi atas jeda istirahat yang diambil)."",
+  ""positiveAffirmations"": ""Apresiasi tulus, penenang pikiran, dan validasi agar pengguna siap beristirahat dengan damai."",
+  ""actionableInsights"": ""1 catatan santai untuk mempersiapkan ritme esok hari.""
+}}";
+
+            try
             {
-                _logger.LogError("Night summary JSON could not be deserialized: {Json}", cleanJson);
-                return;
+                var cleanJson = await _aiService.ExecuteGeminiJsonApi(prompt, "ApiKeyRecapDaily");
+
+                var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                var result = JsonSerializer.Deserialize<DailySummaryAiDto>(cleanJson, options);
+
+                if (result == null) continue;
+
+                await _aiRecapService.SaveRecapAsync(result);
+
+                string subject = memoriesToday.Any()
+                    ? "Refleksi & Rekap Malam AI Assistant"
+                    : "Pesan Penutup Hari & Istirahat - AI Assistant";
+
+                string body = BuildNightSummaryHtml(result.SummaryText, result.PositiveAffirmations, result.ActionableInsights);
+                await _emailService.SendEmailAsync(subject, body, user.Email);
             }
-
-            await _aiRecapService.SaveRecapAsync(result);
-
-            //send email
-            string subject = "Night Summary from AI Assistant";
-            string body = BuildNightSummaryHtml(result.SummaryText, result.PositiveAffirmations, result.ActionableInsights);
-            await _emailService.SendEmailAsync(subject, body, user.Email);
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Gagal memproses Night Summary untuk User {UserId}", user.Id);
+            }
         }
-
     }
-
     public async Task GenerateMorningSummaryAsync()
     {
         var treedayago = DateTime.UtcNow.AddDays(-1);
@@ -142,7 +174,53 @@ public class SchedulerMethod
 
     }
 
+    //AI schedule for AI memory
+    public async Task CompileDailyAIMemoryFromActivity()
+    {
 
+        try
+        {
+            // 1. Ambil list UserId yang memiliki aktivitas hari ini (hemat token, abaikan user pasif)
+            var userIdsWithActivities = await _dbContext.ActivityLogs
+                .Select(a => a.UserId)
+                .Distinct()
+                .ToListAsync();
+
+            if (!userIdsWithActivities.Any())
+            {
+                _logger.LogInformation("Tidak ada aktivitas user yang tercatat pada {TargetDate}. Job selesai.", userIdsWithActivities);
+                return;
+            }
+
+            _logger.LogInformation("Ditemukan {Count} user dengan aktivitas hari ini untuk diproses memorinya.", userIdsWithActivities.Count);
+
+            // 2. Proses memori per user dengan isolasi try-catch (error di 1 user tidak menggagalkan user lain)
+            foreach (var userId in userIdsWithActivities)
+            {
+                try
+                {
+                    _logger.LogInformation("Memproses AI Memory untuk User ID: {UserId}", userId);
+
+                    await _aiMemoryService.ProcessDailyMemoriesAsync(userId);
+                    await Task.Delay(TimeSpan.FromSeconds(4));
+
+                    _logger.LogInformation("Selesai memproses AI Memory untuk User ID: {UserId}", userId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Gagal memproses AI Memory untuk User ID: {UserId}", userId);
+                    // Lanjut ke user berikutnya
+                }
+            }
+
+            _logger.LogInformation("Seluruh proses kompilasi AI Memory harian selesai.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Terjadi kesalahan fatal saat menjalankan CompileDailyAIMemoryFromActivity");
+            throw;
+        }
+    }
 
     private string BuildNightSummaryHtml(string summaryText, string positiveAffirmations, string actionableInsights)
     {

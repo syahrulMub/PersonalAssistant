@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using System.Security.Claims;
+using AIPersonalAssistant.Services.Interface;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -85,6 +86,7 @@ builder.Services.AddHangfireServer();
 
 builder.Services.AddScoped<AiRecapService>();
 builder.Services.AddScoped<SchedulerMethod>();
+builder.Services.AddScoped<IAIMemoryService, AIMemoryService>();
 
 //login
 builder.Services.AddScoped<ITokenService, TokenService>();
@@ -167,6 +169,14 @@ RecurringJob.AddOrUpdate<SchedulerMethod>(
 RecurringJob.AddOrUpdate<SchedulerMethod>(
     "daily-ai-mornig-summary",
     job => job.GenerateMorningSummaryAsync(),
+    "0 8 * * *",
+    new RecurringJobOptions
+    {
+        TimeZone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Jakarta")
+    });
+RecurringJob.AddOrUpdate<SchedulerMethod>(
+    "AI-daily-memory",
+    job => job.CompileDailyAIMemoryFromActivity(),
     "0 8 * * *",
     new RecurringJobOptions
     {
