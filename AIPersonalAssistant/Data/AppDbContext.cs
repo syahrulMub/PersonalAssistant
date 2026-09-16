@@ -15,6 +15,7 @@ public class AppDbContext : DbContext
     public DbSet<UserAIFeature> UserAIFeatures { get; set; }
     public DbSet<AIMemory> AIMemories { get; set; }
     public DbSet<AIMemoryObservation> AIMemoryObservations { get; set; }
+    public DbSet<UserReflection> UserReflections { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -37,7 +38,7 @@ public class AppDbContext : DbContext
         .Property(a => a.UserId)
         .HasDefaultValue(1);
 
-        // Konfigurasi Pivot Table
+        #region  Konfigurasi Pivot Table AI Memory
         modelBuilder.Entity<UserAIFeature>()
             .HasKey(uf => new { uf.UserId, uf.FeatureId });
 
@@ -70,10 +71,9 @@ public class AppDbContext : DbContext
             entity.HasIndex(m => new { m.UserId, m.Key });
             entity.HasIndex(m => new { m.UserId, m.Subject });
         });
+        #endregion
 
-        // ==========================================
-        // 2. Konfigurasi AIMemoryObservation
-        // ==========================================
+        # region Konfigurasi AIMemoryObservation
         modelBuilder.Entity<AIMemoryObservation>(entity =>
         {
             entity.ToTable("AIMemoryObservations");
@@ -91,6 +91,7 @@ public class AppDbContext : DbContext
             entity.HasIndex(o => o.AIMemoryId);
             entity.HasIndex(o => o.UserId);
         });
+        #endregion
     }
 
 }

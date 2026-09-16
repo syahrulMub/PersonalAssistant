@@ -3,6 +3,7 @@ using System;
 using AIPersonalAssistant.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AIPersonalAssistant.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260915045312_AIReflectionActivity")]
+    partial class AIReflectionActivity
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "7.0.0");
@@ -285,7 +288,7 @@ namespace AIPersonalAssistant.Migrations
                             Email = "syahrul.mubarrok4@gmail.com",
                             FullName = "Initial Admin",
                             IsApproved = true,
-                            PasswordHash = "$2a$11$6oxMfDVwCeUxiPzw0757d.3eDNJ6j4mCPMbiRxfV.kDsQdnrqD5dG",
+                            PasswordHash = "$2a$11$z5GiKsOsPLKtp4p6ApuO1eSqAubBNubWmViAJ9ZA9HpJ8B05U6VFe",
                             Role = "Admin"
                         });
                 });
@@ -309,38 +312,6 @@ namespace AIPersonalAssistant.Migrations
                     b.HasIndex("FeatureId");
 
                     b.ToTable("UserAIFeatures");
-                });
-
-            modelBuilder.Entity("AIPersonalAssistant.Models.UserReflection", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("AIFeedback")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ContextType")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ProcessedActionsJson")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("UserId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("VoiceTranscript")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("UserReflections");
                 });
 
             modelBuilder.Entity("AIPersonalAssistant.Models.AIMemory", b =>
@@ -410,17 +381,6 @@ namespace AIPersonalAssistant.Migrations
                         .IsRequired();
 
                     b.Navigation("AIFeature");
-
-                    b.Navigation("User");
-                });
-
-            modelBuilder.Entity("AIPersonalAssistant.Models.UserReflection", b =>
-                {
-                    b.HasOne("AIPersonalAssistant.Models.User", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
 
                     b.Navigation("User");
                 });

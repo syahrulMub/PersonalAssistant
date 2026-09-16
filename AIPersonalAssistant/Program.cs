@@ -74,6 +74,7 @@ builder.Services.AddHostedService<BackgroundReminderService>();
 
 //gemini
 builder.Services.AddHttpClient<AIGeminiService>();
+builder.Services.AddScoped<ReflectionService>();
 
 //hangfire
 builder.Services.AddHangfire(configuration => configuration

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Modal, ModalHeader, ModalBody } from "reactstrap";
 import CreateActivity from "./CreateActivity";
+import DailyReflection from "./DailyReflection";
 import { VoiceInput } from "../context/VoiceInput";
 
 // 1. Komponen Ikon SVG
@@ -95,6 +96,7 @@ export function Activity() {
 
   // State Modal Popup
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isReflectionOpen, setIsReflectionOpen] = useState(false);
 
   // State Voice Input & Gemini AI
   const voiceInputRef = useRef(null);
@@ -334,6 +336,15 @@ export function Activity() {
           </p>
         </div>
         <div className="d-flex flex-wrap align-items-center gap-2 mt-3 mt-sm-0">
+          <button
+            className="btn btn-outline-primary d-flex align-items-center gap-1"
+            onClick={() => setIsReflectionOpen(true)}
+            title="Buka Daily Reflection di halaman ini"
+          >
+            <span aria-hidden="true">&#10024;</span>
+            <span>Daily Reflection</span>
+          </button>
+
           {/* Kontrol Input Suara */}
           <VoiceInput
             ref={voiceInputRef}
@@ -601,6 +612,24 @@ export function Activity() {
             onCancel={toggleModal}
             onReSpeech={originalVoiceText ? handleReSpeech : null}
           />
+        </ModalBody>
+      </Modal>
+
+      <Modal
+        isOpen={isReflectionOpen}
+        toggle={() => setIsReflectionOpen(false)}
+        centered
+        size="xl"
+        scrollable
+      >
+        <ModalHeader
+          toggle={() => setIsReflectionOpen(false)}
+          className="bg-light"
+        >
+          <span className="fw-bold">&#10024; Daily Reflection</span>
+        </ModalHeader>
+        <ModalBody className="p-4">
+          {isReflectionOpen && <DailyReflection />}
         </ModalBody>
       </Modal>
     </div>

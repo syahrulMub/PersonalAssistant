@@ -74,7 +74,7 @@ public class AIGeminiService
             for (int attempt = 1; attempt <= 2; attempt++)
             {
                 using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                linkedCts.CancelAfter(TimeSpan.FromSeconds(30));
+                linkedCts.CancelAfter(TimeSpan.FromSeconds(120));
 
                 try
                 {
@@ -158,14 +158,24 @@ public class AIGeminiService
         {
             throw new InvalidOperationException($"Gemini API key for feature '{feature}' is not configured.");
         }
-
-        var candidateModels = new[]
+        var candidateModels = _configuration.GetSection("Gemini:CandidateModels")
+            .Get<string[]>()
+            ?? _configuration.GetSection("Gemini:CandidateModels")
+                .GetChildren()
+                .Select(c => c.Value)
+                .Where(v => !string.IsNullOrWhiteSpace(v))
+                .ToArray();
+        if (candidateModels == null || candidateModels.Length == 0)
         {
-        "gemini-3.5-flash",
-        "gemini-3.6-flash",
-        "gemini-3.5-flash-lite",
-        "gemini-flash-lite-latest"
-    };
+            candidateModels = new[]
+            {
+                "gemini-3.5-flash",
+                "gemini-3.6-flash",
+                "gemini-3.5-flash-lite",
+                "gemini-flash-lite-latest"
+            };
+        }
+        ;
 
         var payload = new
         {
@@ -206,7 +216,7 @@ public class AIGeminiService
             for (int attempt = 1; attempt <= 2; attempt++)
             {
                 using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                linkedCts.CancelAfter(TimeSpan.FromSeconds(45));
+                linkedCts.CancelAfter(TimeSpan.FromSeconds(180));
 
                 try
                 {
@@ -294,36 +304,7 @@ public class AIGeminiService
         var currentTimeString = clientReferenceTime.ToString("yyyy-MM-dd HH:mm:ss");
         var dayOfWeek = clientReferenceTime.ToString("dddd", new System.Globalization.CultureInfo("id-ID"));
 
-        var prompt = $@"
-Kamu adalah asisten AI yang bertugas mengekstrak dan mem-parsing ucapan/suara pengguna menjadi model aktivitas terstruktur.
-Waktu saat ini: {currentTimeString} WIB. Hari ini adalah hari: {dayOfWeek}.
-
-Kalimat Masukan Pengguna (dari transkrip suara):
-""{speechText}""
-
-Aturan Ekstraksi:
-1. 'title': Judul aktivitas yang ringkas dan jelas (maksimal 150 karakter).
-2. 'description': Deskripsi aktivitas secara lengkap berdasarkan informasi yang diucapkan.
-3. 'category': Pilih SATU kategori yang paling tepat dari daftar berikut:
-   - 'Productivity' (pekerjaan, tugas kantor, meeting, deadline)
-   - 'Learning' (belajar, membaca, kursus, riset)
-   - 'Health' (olahraga, makan, istirahat, dokter, obat)
-   - 'Personal' (keluarga, belanja, ibadah, hobi, urusan pribadi)
-   - 'General' (lainnya)
-4. 'isReminder': Bernilai true jika kalimat mengandung indikasi waktu/pengingat/jadwal (misal: 'besok jam 9', 'nanti sore', 'ingatkan saya'), atau false jika tidak ada waktu spesifik.
-5. 'remindAt': Jika 'isReminder' bernilai true, hitung dan tentukan tanggal dan waktu pengingat dalam format ISO-8601 (yyyy-MM-ddTHH:mm:ss) berdasarkan waktu referensi saat ini ({currentTimeString}). Jika tidak ada waktu yang ditentukan, isi null.
-
-Instruksi Format:
-Kembalikan respon HANYA berupa JSON valid tanpa blok markdown (tanpa ```json ... ```) dan tanpa teks pembuka/penutup apapun.
-
-Format JSON wajib:
-{{
-  ""title"": ""string"",
-  ""description"": ""string"",
-  ""category"": ""string"",
-  ""isReminder"": false,
-  ""remindAt"": null
-}}";
+        var prompt = AIprompt.PromptParseActivityFromSpeechAsync(currentTimeString, dayOfWeek, speechText);
 
         var rawResponse = await ExecuteGeminiApi(prompt, "ApiKeyVoiceActivity");
         var cleanJson = rawResponse.Replace("```json", "", StringComparison.OrdinalIgnoreCase)

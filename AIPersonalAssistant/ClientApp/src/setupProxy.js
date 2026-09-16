@@ -15,7 +15,8 @@ const onError = (err, req, resp, target) => {
 
 module.exports = function (app) {
   const appProxy = createProxyMiddleware(context, {
-    proxyTimeout: 10000,
+    timeout: 120000, // Timeout koneksi masuk (120 detik)
+    proxyTimeout: 120000,
     target: target,
     // Handle errors to prevent the proxy middleware from crashing when
     // the ASP NET Core webserver is unavailable

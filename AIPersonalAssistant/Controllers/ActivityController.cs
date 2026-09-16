@@ -1,7 +1,9 @@
 using System.Security.Claims;
 using AIPersonalAssistant.Data;
 using AIPersonalAssistant.DTOs;
+using AIPersonalAssistant.DTOs.AIReflectionActivity;
 using AIPersonalAssistant.Extension;
+using AIPersonalAssistant.Models;
 using AIPersonalAssistant.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -17,31 +19,42 @@ public class ActivityController : ControllerBase
     private readonly AppDbContext _dbContext;
     private readonly ILogger<ActivityController> _logger;
     private readonly AIGeminiService _aiGeminiService;
+    private readonly ReflectionService _reflectionService;
 
-    public ActivityController(AppDbContext dbContext, ILogger<ActivityController> logger, AIGeminiService aiGeminiService)
+    public ActivityController(
+        AppDbContext dbContext,
+        ILogger<ActivityController> logger,
+        AIGeminiService aiGeminiService,
+        ReflectionService reflectionService)
     {
         _dbContext = dbContext;
         _logger = logger;
         _aiGeminiService = aiGeminiService;
+        _reflectionService = reflectionService;
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetActivities([FromQuery] int page = 1, [FromQuery] int pageSize = 5)
+    public async Task<IActionResult> GetActivities([FromQuery] int page = 1, [FromQuery] int pageSize = 10, [FromQuery] string? status = null)
     {
         try
         {
             int userId = User.GetUserId();
-            _logger.LogInformation("ActivityController.GetActivities called. page={Page}, pageSize={PageSize}", page, pageSize);
+            _logger.LogInformation("ActivityController.GetActivities called. page={Page}, pageSize={PageSize}, status={Status}", page, pageSize, status);
 
             if (page < 1) page = 1;
-            if (pageSize < 1) pageSize = 5;
+            if (pageSize < 1) pageSize = 10;
             if (pageSize > 100) pageSize = 100;
 
-            var totalCount = await _dbContext.ActivityLogs
-            .Where(x => x.UserId == userId).CountAsync();
+            var query = _dbContext.ActivityLogs.Where(x => x.UserId == userId);
 
-            var items = await _dbContext.ActivityLogs
-                .Where(x => x.UserId == userId)
+            if (!string.IsNullOrWhiteSpace(status))
+            {
+                query = query.Where(x => x.Status == status);
+            }
+
+            var totalCount = await query.CountAsync();
+
+            var items = await query
                 .OrderByDescending(a => a.CreateAt)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
@@ -51,10 +64,16 @@ public class ActivityController : ControllerBase
                     Title = a.Title,
                     Description = a.Description,
                     Category = a.Category,
+                    Status = a.Status,
+                    IsCompleted = a.Status == "Completed",
                     CreatedAt = a.CreateAt,
-                    IsReviewed = a.IsCompleted,
                     RemindAt = a.ReminderTime,
-                    IsReminder = a.IsReminder
+                    OriginalRemindAt = a.OriginalReminderTime,
+                    IsReminder = a.IsReminder,
+                    RescheduleCount = a.RescheduleCount,
+                    CompletedAt = a.CompletedAt,
+                    ResolutionSource = a.ResolutionSource,
+                    Note = a.Note
                 })
                 .ToListAsync();
 
@@ -81,9 +100,10 @@ public class ActivityController : ControllerBase
     {
         try
         {
+            int userId = User.GetUserId();
             _logger.LogInformation("ActivityController.GetActivity called. id={Id}", id);
 
-            var activity = await _dbContext.ActivityLogs.FindAsync(id);
+            var activity = await _dbContext.ActivityLogs.FirstOrDefaultAsync(a => a.Id == id && a.UserId == userId);
             if (activity == null)
             {
                 _logger.LogWarning("ActivityController.GetActivity not found. id={Id}", id);
@@ -96,13 +116,18 @@ public class ActivityController : ControllerBase
                 Title = activity.Title,
                 Description = activity.Description,
                 Category = activity.Category,
+                Status = activity.Status,
+                IsCompleted = activity.Status == "Completed",
                 CreatedAt = activity.CreateAt,
-                IsReviewed = activity.IsCompleted,
                 RemindAt = activity.ReminderTime,
-                IsReminder = activity.IsReminder
+                OriginalRemindAt = activity.OriginalReminderTime,
+                IsReminder = activity.IsReminder,
+                RescheduleCount = activity.RescheduleCount,
+                CompletedAt = activity.CompletedAt,
+                ResolutionSource = activity.ResolutionSource,
+                Note = activity.Note
             };
 
-            _logger.LogInformation("ActivityController.GetActivity completed. id={Id}", id);
             return Ok(activityDto);
         }
         catch (Exception ex)
@@ -123,24 +148,28 @@ public class ActivityController : ControllerBase
                 return BadRequest("Activity payload is required.");
             }
 
-            _logger.LogInformation("ActivityController.CreateActivity called. Title={Title}", createActivityDto.Title);
-
             if (!ModelState.IsValid)
             {
                 _logger.LogWarning("ActivityController.CreateActivity validation failed.");
                 return BadRequest(ModelState);
             }
 
-            var activity = new Models.ActivityLogs
+            int userId = User.GetUserId();
+            bool hasSchedule = createActivityDto.RemindAt.HasValue;
+            var activity = new ActivityLogs
             {
                 Title = createActivityDto.Title,
                 Description = createActivityDto.Description,
-                Category = createActivityDto.Category,
+                Category = string.IsNullOrWhiteSpace(createActivityDto.Category) ? "General" : createActivityDto.Category,
                 IsReminder = createActivityDto.IsReminder,
-                ReminderTime = createActivityDto.RemindAt ?? DateTime.MinValue,
+                ReminderTime = createActivityDto.RemindAt,
+                OriginalReminderTime = createActivityDto.RemindAt,
+                Status = hasSchedule ? "Pending" : "Completed",
+                RescheduleCount = 0,
                 CreateAt = DateTime.UtcNow,
-                IsCompleted = false,
-                UserId = User.GetUserId()
+                UserId = userId,
+                ResolutionSource = "ManualUI",
+                CompletedAt = hasSchedule ? null : DateTime.UtcNow,
             };
 
             _dbContext.ActivityLogs.Add(activity);
@@ -152,10 +181,14 @@ public class ActivityController : ControllerBase
                 Title = activity.Title,
                 Description = activity.Description,
                 Category = activity.Category,
+                Status = activity.Status,
+                IsCompleted = false,
                 CreatedAt = activity.CreateAt,
-                IsReviewed = activity.IsCompleted,
                 RemindAt = activity.ReminderTime,
-                IsReminder = activity.IsReminder
+                OriginalRemindAt = activity.OriginalReminderTime,
+                IsReminder = activity.IsReminder,
+                RescheduleCount = activity.RescheduleCount,
+                ResolutionSource = activity.ResolutionSource
             };
 
             _logger.LogInformation("ActivityController.CreateActivity completed. id={Id}", activity.Id);
@@ -173,9 +206,10 @@ public class ActivityController : ControllerBase
     {
         try
         {
+            int userId = User.GetUserId();
             _logger.LogInformation("ActivityController.DeleteActivity called. id={Id}", id);
 
-            var activity = await _dbContext.ActivityLogs.FindAsync(id);
+            var activity = await _dbContext.ActivityLogs.FirstOrDefaultAsync(a => a.Id == id && a.UserId == userId);
             if (activity == null)
             {
                 _logger.LogWarning("ActivityController.DeleteActivity not found. id={Id}", id);
@@ -211,7 +245,6 @@ public class ActivityController : ControllerBase
 
             _logger.LogInformation("ActivityController.ParseFromVoice called. SpeechTextLength={Length}", dto.SpeechText.Length);
 
-            // Gunakan waktu lokal pengguna atau WIB (GMT+7)
             DateTime clientNow = DateTime.UtcNow.AddHours(7);
             if (!string.IsNullOrWhiteSpace(dto.ClientTimeZone))
             {
@@ -254,5 +287,39 @@ public class ActivityController : ControllerBase
                 Message = $"Gemini AI gagal memproses ({ex.Message}). Teks suara Anda dimasukkan ke form agar tidak hilang dan dapat diedit secara manual."
             });
         }
+    }
+
+    // ==========================================
+    // REFLECTION ENDPOINTS (AI-COMPILED CONTEXT & SUBMISSION)
+    // ==========================================
+
+    /// <summary>
+    /// Mengambil konteks refleksi yang sudah dikompilasi dan disaring oleh AI
+    /// </summary>
+    /// <param name="type">"Daily" atau "Weekly"</param>
+    [HttpGet("reflection/context")]
+    public async Task<IActionResult> GetReflectionContext()
+    {
+        try
+        {
+            int userId = User.GetUserId();
+            _logger.LogInformation("ActivityController.GetReflectionContext called for UserId={UserId}", userId);
+
+            var context = await _reflectionService.GetReflectionContextAsync(userId);
+            return Ok(context);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "ActivityController.GetReflectionContext failed.");
+            return StatusCode(500, "Gagal mengambil data konteks refleksi AI.");
+        }
+    }
+
+    [HttpPost("submit")]
+    public async Task<IActionResult> Submit([FromBody] ReflectionContextDto request)
+    {
+        int userId = User.GetUserId();
+        var result = await _reflectionService.ProcessReflectionTranscriptAsync(userId, request);
+        return Ok(result);
     }
 }
