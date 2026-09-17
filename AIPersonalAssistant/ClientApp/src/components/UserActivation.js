@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { Modal, ModalHeader, ModalBody } from "reactstrap";
 import { formatDateOnly } from "../context/DateFormat";
-import { TiUserAdd } from "react-icons/ti";
+import { FaUserPlus, FaUserCheck, FaTrash } from "react-icons/fa";
 
 export function UserActivation() {
   const [user, setUser] = useState([]);
@@ -42,7 +41,7 @@ export function UserActivation() {
       }
       setError(null);
     } catch (err) {
-      console.error("Error fetching activities:", err);
+      console.error("Error fetching users:", err);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -54,7 +53,7 @@ export function UserActivation() {
     fetchUsers(page, pageSize);
   }, [page, pageSize]);
 
-  // Hapus aktivitas
+  // Approve user
   const approveUser = async (id, fullname) => {
     if (
       !window.confirm(`Apakah Anda yakin ingin mengapprove user "${fullname}"?`)
@@ -69,6 +68,36 @@ export function UserActivation() {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
 
+      const data = await response.json().catch(() => ({}));
+
+      if (response.ok) {
+        fetchUsers(page, pageSize);
+      } else {
+        alert(data.message || "Gagal mengapprove user.");
+      }
+    } catch (err) {
+      console.error("Error approving user:", err);
+      alert("Terjadi kesalahan saat mengapprove user.");
+    }
+  };
+
+  // Hapus user
+  const deleteUser = async (id, fullname) => {
+    if (
+      !window.confirm(`Apakah Anda yakin ingin menghapus user "${fullname}"?`)
+    ) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`/api/user/${id}`, {
+        method: "DELETE",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+
+      const data = await response.json().catch(() => ({}));
+
       if (response.ok) {
         // Jika item di halaman saat ini tinggal 1 dan bukan halaman 1, mundur ke halaman sebelumnya
         if (user.length === 1 && page > 1) {
@@ -77,11 +106,11 @@ export function UserActivation() {
           fetchUsers(page, pageSize);
         }
       } else {
-        alert("Gagal menghapus aktivitas.");
+        alert(data.message || "Gagal menghapus user.");
       }
     } catch (err) {
-      console.error("Error deleting activity:", err);
-      alert("Terjadi kesalahan saat menghapus aktivitas.");
+      console.error("Error deleting user:", err);
+      alert("Terjadi kesalahan saat menghapus user.");
     }
   };
 
@@ -121,41 +150,88 @@ export function UserActivation() {
               <table className="table table-hover align-middle mb-0">
                 <thead className="table-light">
                   <tr>
-                    <th style={{ width: "3%" }}>No</th>
+                    <th style={{ width: "5%" }}>No</th>
                     <th style={{ width: "25%" }}>Fullname</th>
-                    <th style={{ width: "15%" }}>Email</th>
-                    <th style={{ width: "30%" }}>Approved</th>
-                    <th style={{ width: "30%" }}>Create At</th>
-                    <th style={{ width: "10%" }} className="text-center">
+                    <th style={{ width: "25%" }}>Email</th>
+                    <th style={{ width: "15%" }}>Approved</th>
+                    <th style={{ width: "18%" }}>Create At</th>
+                    <th style={{ width: "12%" }} className="text-center">
                       Aksi
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {user.map((user, index) => (
-                    <tr key={user.id}>
-                      <td>{index + 1}</td>
-                      <td className="fw-semibold text-dark">{user.fullName}</td>
-                      <td>{user.email}</td>
-                      <td>{user.isApproved ? "Approve" : "Not yet"}</td>
+                  {user.map((item, index) => (
+                    <tr key={item.id}>
+                      <td>{(page - 1) * pageSize + index + 1}</td>
+                      <td className="fw-semibold text-dark">{item.fullName}</td>
+                      <td>{item.email}</td>
+                      <td>
+                        {item.isApproved ? (
+                          <span className="badge bg-success-subtle text-success border border-success px-2 py-1">
+                            Approved
+                          </span>
+                        ) : (
+                          <span className="badge bg-warning-subtle text-warning border border-warning px-2 py-1">
+                            Not yet
+                          </span>
+                        )}
+                      </td>
                       <td className="text-muted small">
-                        {formatDateOnly(user.createdAt)}
+                        {formatDateOnly(item.createdAt)}
                       </td>
                       <td className="text-center">
-                        <button
-                          className="btn btn-sm btn-outline-danger p-1 px-2 rounded-circle"
-                          onClick={() => approveUser(user.id, user.fullName)}
-                          title="Approve"
-                          style={{
-                            width: "32px",
-                            height: "32px",
-                            display: "inline-flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                          }}
-                        >
-                          <TiUserAdd />
-                        </button>
+                        <div className="d-flex justify-content-center align-items-center gap-2">
+                          {item.isApproved ? (
+                            <button
+                              className="btn btn-sm btn-outline-success p-1 px-2 rounded-circle"
+                              disabled
+                              title="Sudah di-approve"
+                              style={{
+                                width: "32px",
+                                height: "32px",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                cursor: "default",
+                                opacity: 0.85,
+                              }}
+                            >
+                              <FaUserCheck />
+                            </button>
+                          ) : (
+                            <button
+                              className="btn btn-sm btn-outline-primary p-1 px-2 rounded-circle"
+                              onClick={() =>
+                                approveUser(item.id, item.fullName)
+                              }
+                              title="Approve User"
+                              style={{
+                                width: "32px",
+                                height: "32px",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                            >
+                              <FaUserPlus />
+                            </button>
+                          )}
+                          <button
+                            className="btn btn-sm btn-outline-danger p-1 px-2 rounded-circle"
+                            onClick={() => deleteUser(item.id, item.fullName)}
+                            title="Hapus User"
+                            style={{
+                              width: "32px",
+                              height: "32px",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            <FaTrash />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -173,7 +249,7 @@ export function UserActivation() {
               <span className="text-muted small">
                 Menampilkan <strong>{startItem}</strong> -{" "}
                 <strong>{endItem}</strong> dari <strong>{totalCount}</strong>{" "}
-                aktivitas
+                user
               </span>
               <div className="d-flex align-items-center gap-1">
                 <span className="text-muted small">Baris:</span>
