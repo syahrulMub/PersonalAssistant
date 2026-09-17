@@ -270,7 +270,7 @@ export function Home() {
 
       {/* 4. Footer */}
       <footer className="pt-6 border-t border-slate-200/60 dark:border-slate-800/60 flex items-center justify-center text-xs text-slate-400 dark:text-[#94A3B8] font-mono">
-        <span>dev by syahrulMub @2026</span>
+        <span>dev by syahrulMub with AI @2026</span>
       </footer>
     </div>
   );

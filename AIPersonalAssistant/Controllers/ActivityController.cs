@@ -34,12 +34,16 @@ public class ActivityController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetActivities([FromQuery] int page = 1, [FromQuery] int pageSize = 10, [FromQuery] string? status = null)
+    public async Task<IActionResult> GetActivities(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] string? status = null,
+        [FromQuery] string? timeline = null)
     {
         try
         {
             int userId = User.GetUserId();
-            _logger.LogInformation("ActivityController.GetActivities called. page={Page}, pageSize={PageSize}, status={Status}", page, pageSize, status);
+            _logger.LogInformation("ActivityController.GetActivities called. page={Page}, pageSize={PageSize}, status={Status}, timeline={Timeline}", page, pageSize, status, timeline);
 
             if (page < 1) page = 1;
             if (pageSize < 1) pageSize = 10;
@@ -47,15 +51,64 @@ public class ActivityController : ControllerBase
 
             var query = _dbContext.ActivityLogs.Where(x => x.UserId == userId);
 
-            if (!string.IsNullOrWhiteSpace(status))
+            var todayWib = DateTime.UtcNow.Date;
+            var startOfTodayUtc = todayWib;
+            var endOfTodayUtc = startOfTodayUtc.AddDays(1).AddTicks(-1);
+
+            var overdueCount = await _dbContext.ActivityLogs
+                .Where(x => x.UserId == userId && x.Status != "Completed" && x.Status != "Cancelled" && (x.ReminderTime ?? x.CreateAt) < startOfTodayUtc)
+                .CountAsync();
+
+            if (!string.IsNullOrWhiteSpace(timeline))
+            {
+                var timelineLower = timeline.Trim().ToLowerInvariant();
+
+                if (timelineLower == "today")
+                {
+                    // Fokus Hari Ini: tugas hari ini (WIB) berdasarkan ReminderTime atau CreateAt dari database
+                    query = query.Where(x => x.Status != "Completed" && x.Status != "Cancelled" && ((x.ReminderTime ?? x.CreateAt) >= startOfTodayUtc && (x.ReminderTime ?? x.CreateAt) <= endOfTodayUtc));
+                }
+                else if (timelineLower == "upcoming")
+                {
+                    // Mendatang: tugas besok dan seterusnya
+                    query = query.Where(x => x.Status != "Completed" && x.Status != "Cancelled" && (x.ReminderTime ?? x.CreateAt) > endOfTodayUtc);
+                }
+                else if (timelineLower == "overdue")
+                {
+                    // Terlewat: tugas kemarin atau sebelumnya yang belum selesai
+                    query = query.Where(x => x.Status != "Completed" && x.Status != "Cancelled" && (x.ReminderTime ?? x.CreateAt) < startOfTodayUtc);
+                }
+                else if (timelineLower == "completed")
+                {
+                    query = query.Where(x => x.Status == "Completed");
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(status))
             {
                 query = query.Where(x => x.Status == status);
             }
 
             var totalCount = await query.CountAsync();
 
-            var items = await query
-                .OrderByDescending(a => a.CreateAt)
+            IOrderedQueryable<ActivityLogs> orderedQuery;
+            if (timeline?.Equals("upcoming", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                orderedQuery = query.OrderBy(a => a.ReminderTime ?? a.CreateAt);
+            }
+            else if (timeline?.Equals("overdue", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                orderedQuery = query.OrderBy(a => a.ReminderTime ?? a.CreateAt);
+            }
+            else if (status?.Equals("Completed", StringComparison.OrdinalIgnoreCase) == true || timeline?.Equals("completed", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                orderedQuery = query.OrderByDescending(a => a.CompletedAt ?? a.CreateAt);
+            }
+            else
+            {
+                orderedQuery = query.OrderByDescending(a => a.ReminderTime ?? a.CreateAt);
+            }
+
+            var items = await orderedQuery
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
                 .Select(a => new ActivityResponseDto
@@ -66,8 +119,8 @@ public class ActivityController : ControllerBase
                     Category = a.Category,
                     Status = a.Status,
                     CreatedAt = a.CreateAt,
-                    RemindAt = a.ReminderTime,
-                    OriginalRemindAt = a.OriginalReminderTime,
+                    RemindAt = a.ReminderTime ?? a.CreateAt,
+                    OriginalRemindAt = a.OriginalReminderTime ?? a.CreateAt,
                     IsReminder = a.IsReminder,
                     RescheduleCount = a.RescheduleCount,
                     CompletedAt = a.CompletedAt,
@@ -81,7 +134,8 @@ public class ActivityController : ControllerBase
                 Items = items,
                 TotalCount = totalCount,
                 Page = page,
-                PageSize = pageSize
+                PageSize = pageSize,
+                OverdueCount = overdueCount
             };
 
             _logger.LogInformation("ActivityController.GetActivities completed. Returned {Count} items.", items.Count);
@@ -117,8 +171,8 @@ public class ActivityController : ControllerBase
                 Category = activity.Category,
                 Status = activity.Status,
                 CreatedAt = activity.CreateAt,
-                RemindAt = activity.ReminderTime,
-                OriginalRemindAt = activity.OriginalReminderTime,
+                RemindAt = activity.ReminderTime ?? activity.CreateAt,
+                OriginalRemindAt = activity.OriginalReminderTime ?? activity.CreateAt,
                 IsReminder = activity.IsReminder,
                 RescheduleCount = activity.RescheduleCount,
                 CompletedAt = activity.CompletedAt,
@@ -152,22 +206,35 @@ public class ActivityController : ControllerBase
                 return BadRequest(ModelState);
             }
 
+            if (!createActivityDto.RemindAt.HasValue)
+            {
+                return BadRequest(new { message = "Waktu jadwal kegiatan wajib diisi." });
+            }
+
+            var remindAtUtc = createActivityDto.RemindAt.Value.Kind == DateTimeKind.Utc
+                ? createActivityDto.RemindAt.Value
+                : createActivityDto.RemindAt.Value.ToUniversalTime();
+
+            if (remindAtUtc <= DateTime.UtcNow)
+            {
+                return BadRequest(new { message = "Waktu jadwal kegiatan harus lebih besar dari waktu sekarang (UTC now)." });
+            }
+
             int userId = User.GetUserId();
-            bool hasSchedule = createActivityDto.RemindAt.HasValue;
             var activity = new ActivityLogs
             {
                 Title = createActivityDto.Title,
                 Description = createActivityDto.Description,
                 Category = string.IsNullOrWhiteSpace(createActivityDto.Category) ? "General" : createActivityDto.Category,
                 IsReminder = createActivityDto.IsReminder,
-                ReminderTime = createActivityDto.RemindAt,
-                OriginalReminderTime = createActivityDto.RemindAt,
-                Status = hasSchedule ? "Pending" : "Completed",
+                ReminderTime = remindAtUtc,
+                OriginalReminderTime = remindAtUtc,
+                Status = "Pending",
                 RescheduleCount = 0,
                 CreateAt = DateTime.UtcNow,
                 UserId = userId,
                 ResolutionSource = "ManualUI",
-                CompletedAt = hasSchedule ? null : DateTime.UtcNow,
+                CompletedAt = null,
             };
 
             _dbContext.ActivityLogs.Add(activity);
@@ -198,31 +265,246 @@ public class ActivityController : ControllerBase
         }
     }
 
-    [HttpDelete("{id}")]
-    public async Task<IActionResult> DeleteActivity(int id)
+
+    [HttpPut("{id}")]
+    public async Task<IActionResult> UpdateActivity(int id, [FromBody] UpdateActivityDto? dto)
     {
         try
         {
+            if (dto == null)
+            {
+                return BadRequest("Payload pembaruan aktivitas wajib diisi.");
+            }
+
             int userId = User.GetUserId();
-            _logger.LogInformation("ActivityController.DeleteActivity called. id={Id}", id);
+            _logger.LogInformation("ActivityController.UpdateActivity called. id={Id}", id);
 
             var activity = await _dbContext.ActivityLogs.FirstOrDefaultAsync(a => a.Id == id && a.UserId == userId);
             if (activity == null)
             {
-                _logger.LogWarning("ActivityController.DeleteActivity not found. id={Id}", id);
-                return NotFound();
+                _logger.LogWarning("ActivityController.UpdateActivity not found. id={Id}", id);
+                return NotFound(new { message = "Aktivitas tidak ditemukan." });
             }
 
-            _dbContext.ActivityLogs.Remove(activity);
+            // Jika aktivitas sudah Completed/Achieved: hanya bisa ganti deskripsi/catatan saja (jadwal, kategori, judul, status dikunci)
+            if (activity.Status.Equals("Completed", StringComparison.OrdinalIgnoreCase))
+            {
+                if (dto.Description != null)
+                {
+                    activity.Description = dto.Description.Trim();
+                }
+
+                if (dto.Note != null)
+                {
+                    activity.Note = dto.Note;
+                }
+
+                activity.UpdatedAt = DateTime.UtcNow;
+                await _dbContext.SaveChangesAsync();
+
+                _logger.LogInformation("ActivityController.UpdateActivity (Completed description only) completed. id={Id}", id);
+                return Ok(new
+                {
+                    success = true,
+                    message = "Deskripsi pencapaian berhasil diperbarui.",
+                    activity = new ActivityResponseDto
+                    {
+                        Id = activity.Id,
+                        Title = activity.Title,
+                        Description = activity.Description,
+                        Category = activity.Category,
+                        Status = activity.Status,
+                        CreatedAt = activity.CreateAt,
+                        RemindAt = activity.ReminderTime,
+                        OriginalRemindAt = activity.OriginalReminderTime,
+                        IsReminder = activity.IsReminder,
+                        RescheduleCount = activity.RescheduleCount,
+                        CompletedAt = activity.CompletedAt,
+                        ResolutionSource = activity.ResolutionSource,
+                        Note = activity.Note
+                    }
+                });
+            }
+
+            if (!string.IsNullOrWhiteSpace(dto.Title))
+            {
+                activity.Title = dto.Title.Trim();
+            }
+
+            if (dto.Description != null)
+            {
+                activity.Description = dto.Description.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(dto.Category))
+            {
+                activity.Category = dto.Category.Trim();
+            }
+
+            if (dto.RemindAt.HasValue)
+            {
+                var remindAtUtc = dto.RemindAt.Value.Kind == DateTimeKind.Utc
+                    ? dto.RemindAt.Value
+                    : dto.RemindAt.Value.ToUniversalTime();
+
+                if (remindAtUtc <= DateTime.UtcNow)
+                {
+                    return BadRequest(new { message = "Waktu jadwal kegiatan harus lebih besar dari waktu sekarang (UTC now)." });
+                }
+
+                // Jika waktu jadwal diubah dan sebelumnya sudah ada jadwal
+                if (activity.ReminderTime.HasValue && Math.Abs((activity.ReminderTime.Value - remindAtUtc).TotalMinutes) > 1)
+                {
+                    activity.Status = "Rescheduled";
+                    activity.RescheduleCount += 1;
+                    // Reschedule: default notifikasi email aktif
+                    activity.IsReminder = dto.IsReminder ?? true;
+                }
+                else if (dto.IsReminder.HasValue)
+                {
+                    activity.IsReminder = dto.IsReminder.Value;
+                }
+                activity.ReminderTime = remindAtUtc;
+            }
+            else if (dto.IsReminder.HasValue)
+            {
+                activity.IsReminder = dto.IsReminder.Value;
+            }
+
+            if (!string.IsNullOrWhiteSpace(dto.Status) && dto.Status.Equals("Completed", StringComparison.OrdinalIgnoreCase))
+            {
+                activity.Status = "Completed";
+                activity.CompletedAt = DateTime.UtcNow;
+                activity.ResolutionSource = dto.ResolutionSource ?? "ManualCheck";
+                activity.IsReminder = false; // Selesai: reminder email harus false
+            }
+            else if (!string.IsNullOrWhiteSpace(dto.Status) && dto.Status.Equals("Cancelled", StringComparison.OrdinalIgnoreCase))
+            {
+                activity.Status = "Cancelled";
+                activity.ResolutionSource = dto.ResolutionSource ?? "ManualCancel";
+                activity.IsReminder = false; // Batal: reminder email harus false
+            }
+
+            if (dto.Note != null)
+            {
+                activity.Note = dto.Note;
+            }
+
+            activity.UpdatedAt = DateTime.UtcNow;
+
             await _dbContext.SaveChangesAsync();
 
-            _logger.LogInformation("ActivityController.DeleteActivity completed. id={Id}", id);
-            return NoContent();
+            _logger.LogInformation("ActivityController.UpdateActivity completed. id={Id}", id);
+            return Ok(new
+            {
+                success = true,
+                message = "Aktivitas berhasil diperbarui.",
+                activity = new ActivityResponseDto
+                {
+                    Id = activity.Id,
+                    Title = activity.Title,
+                    Description = activity.Description,
+                    Category = activity.Category,
+                    Status = activity.Status,
+                    CreatedAt = activity.CreateAt,
+                    RemindAt = activity.ReminderTime ?? activity.CreateAt,
+                    OriginalRemindAt = activity.OriginalReminderTime ?? activity.CreateAt,
+                    IsReminder = activity.IsReminder,
+                    RescheduleCount = activity.RescheduleCount,
+                    CompletedAt = activity.CompletedAt,
+                    ResolutionSource = activity.ResolutionSource,
+                    Note = activity.Note
+                }
+            });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "ActivityController.DeleteActivity failed. id={Id}", id);
-            return StatusCode(500, "Error deleting activity.");
+            _logger.LogError(ex, "ActivityController.UpdateActivity failed. id={Id}", id);
+            return StatusCode(500, "Error updating activity.");
+        }
+    }
+
+    [HttpPut("{id}/status")]
+    public async Task<IActionResult> UpdateActivityStatus(int id, [FromBody] UpdateActivityStatusDto? dto)
+    {
+        try
+        {
+            if (dto == null || string.IsNullOrWhiteSpace(dto.Status))
+            {
+                return BadRequest("Status is required.");
+            }
+
+            int userId = User.GetUserId();
+            _logger.LogInformation("ActivityController.UpdateActivityStatus called. id={Id}, newStatus={Status}", id, dto.Status);
+
+            var activity = await _dbContext.ActivityLogs.FirstOrDefaultAsync(a => a.Id == id && a.UserId == userId);
+            if (activity == null)
+            {
+                _logger.LogWarning("ActivityController.UpdateActivityStatus not found. id={Id}", id);
+                return NotFound(new { message = "Aktivitas tidak ditemukan." });
+            }
+
+            // Larang pengembalian ke status Fokus/Pending jika aktivitas sudah selesai
+            if (activity.Status.Equals("Completed", StringComparison.OrdinalIgnoreCase))
+            {
+                return BadRequest(new { message = "Aktivitas yang telah selesai tidak dapat diubah statusnya." });
+            }
+
+            if (!dto.Status.Equals("Completed", StringComparison.OrdinalIgnoreCase) && !dto.Status.Equals("Cancelled", StringComparison.OrdinalIgnoreCase))
+            {
+                return BadRequest(new { message = "Hanya perubahan ke status 'Completed' atau 'Cancelled' yang diizinkan." });
+            }
+
+            if (dto.Status.Equals("Cancelled", StringComparison.OrdinalIgnoreCase))
+            {
+                activity.Status = "Cancelled";
+                activity.ResolutionSource = dto.ResolutionSource ?? "ManualCancel";
+                activity.IsReminder = false; // Batal: reminder email harus false
+            }
+            else
+            {
+                activity.Status = "Completed";
+                activity.CompletedAt = DateTime.UtcNow;
+                activity.ResolutionSource = dto.ResolutionSource ?? "ManualCheck";
+                activity.IsReminder = false; // Selesai: reminder email harus false
+            }
+
+            if (dto.Note != null)
+            {
+                activity.Note = dto.Note;
+            }
+
+            activity.UpdatedAt = DateTime.UtcNow;
+
+            await _dbContext.SaveChangesAsync();
+
+            _logger.LogInformation("ActivityController.UpdateActivityStatus completed. id={Id}, status={Status}", id, activity.Status);
+            return Ok(new
+            {
+                success = true,
+                message = $"Status aktivitas berhasil diubah menjadi {activity.Status}.",
+                activity = new ActivityResponseDto
+                {
+                    Id = activity.Id,
+                    Title = activity.Title,
+                    Description = activity.Description,
+                    Category = activity.Category,
+                    Status = activity.Status,
+                    CreatedAt = activity.CreateAt,
+                    RemindAt = activity.ReminderTime,
+                    OriginalRemindAt = activity.OriginalReminderTime,
+                    IsReminder = activity.IsReminder,
+                    RescheduleCount = activity.RescheduleCount,
+                    CompletedAt = activity.CompletedAt,
+                    ResolutionSource = activity.ResolutionSource,
+                    Note = activity.Note
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "ActivityController.UpdateActivityStatus failed. id={Id}", id);
+            return StatusCode(500, "Error updating activity status.");
         }
     }
 
@@ -256,33 +538,122 @@ public class ActivityController : ControllerBase
                 }
             }
 
-            var parsedActivity = await _aiGeminiService.ParseActivityFromSpeechAsync(dto.SpeechText, clientNow);
+            var parsedActivities = await _aiGeminiService.ParseActivityFromSpeechAsync(dto.SpeechText, clientNow);
 
             return Ok(new ParseVoiceResponseDto
             {
                 Success = true,
                 RawTranscript = dto.SpeechText,
-                Activity = parsedActivity,
-                Message = "Berhasil mem-parsing suara dengan Gemini AI."
+                Activities = parsedActivities,
+                Message = $"Berhasil mem-parsing {parsedActivities.Count} kegiatan dari suara dengan Gemini AI."
             });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "ActivityController.ParseFromVoice failed.");
+            var fallback = new CreateActivityDto
+            {
+                Title = (dto?.SpeechText?.Length > 50 ? dto.SpeechText.Substring(0, 50) + "..." : dto?.SpeechText) ?? string.Empty,
+                Description = dto?.SpeechText ?? string.Empty,
+                Category = "General",
+                IsReminder = true,
+                RemindAt = null
+            };
+
             return Ok(new ParseVoiceResponseDto
             {
                 Success = false,
                 RawTranscript = dto?.SpeechText ?? string.Empty,
-                Activity = new CreateActivityDto
-                {
-                    Title = (dto?.SpeechText?.Length > 50 ? dto.SpeechText.Substring(0, 50) + "..." : dto?.SpeechText) ?? string.Empty,
-                    Description = dto?.SpeechText ?? string.Empty,
-                    Category = "General",
-                    IsReminder = false,
-                    RemindAt = null
-                },
-                Message = $"Gemini AI gagal memproses ({ex.Message}). Teks suara Anda dimasukkan ke form agar tidak hilang dan dapat diedit secara manual."
+                Activities = new List<CreateActivityDto> { fallback },
+                Message = $"Gemini AI gagal memproses ({ex.Message}). Teks suara Anda dimasukkan ke form agar dapat diedit secara manual."
             });
+        }
+    }
+
+    [HttpPost("batch")]
+    public async Task<IActionResult> CreateActivitiesBatch([FromBody] List<CreateActivityDto>? dtoList)
+    {
+        try
+        {
+            if (dtoList == null || dtoList.Count == 0)
+            {
+                return BadRequest(new { message = "Daftar aktivitas tidak boleh kosong." });
+            }
+
+            int userId = User.GetUserId();
+            _logger.LogInformation("ActivityController.CreateActivitiesBatch called. Count={Count}, UserId={UserId}", dtoList.Count, userId);
+
+            var createdActivities = new List<ActivityLogs>();
+
+            foreach (var dto in dtoList)
+            {
+                if (string.IsNullOrWhiteSpace(dto.Title))
+                {
+                    continue;
+                }
+
+                DateTime? remindAtUtc = null;
+                if (dto.RemindAt.HasValue)
+                {
+                    remindAtUtc = dto.RemindAt.Value.Kind == DateTimeKind.Utc
+                        ? dto.RemindAt.Value
+                        : dto.RemindAt.Value.ToUniversalTime();
+                }
+
+                var activity = new ActivityLogs
+                {
+                    Title = dto.Title.Trim(),
+                    Description = dto.Description?.Trim() ?? string.Empty,
+                    Category = string.IsNullOrWhiteSpace(dto.Category) ? "General" : dto.Category.Trim(),
+                    IsReminder = dto.IsReminder,
+                    ReminderTime = remindAtUtc,
+                    OriginalReminderTime = remindAtUtc,
+                    Status = "Pending",
+                    RescheduleCount = 0,
+                    CreateAt = DateTime.UtcNow,
+                    UserId = userId,
+                    ResolutionSource = "VoiceBatch",
+                    CompletedAt = null
+                };
+
+                createdActivities.Add(activity);
+            }
+
+            if (createdActivities.Count == 0)
+            {
+                return BadRequest(new { message = "Tidak ada aktivitas valid yang dapat disimpan." });
+            }
+
+            _dbContext.ActivityLogs.AddRange(createdActivities);
+            await _dbContext.SaveChangesAsync();
+
+            var responseDtos = createdActivities.Select(act => new ActivityResponseDto
+            {
+                Id = act.Id,
+                Title = act.Title,
+                Description = act.Description,
+                Category = act.Category,
+                Status = act.Status,
+                CreatedAt = act.CreateAt,
+                RemindAt = act.ReminderTime,
+                OriginalRemindAt = act.OriginalReminderTime,
+                IsReminder = act.IsReminder,
+                RescheduleCount = act.RescheduleCount,
+                ResolutionSource = act.ResolutionSource
+            }).ToList();
+
+            _logger.LogInformation("ActivityController.CreateActivitiesBatch succeeded. Saved={Count} activities.", createdActivities.Count);
+            return Ok(new
+            {
+                success = true,
+                message = $"{responseDtos.Count} aktivitas berhasil disimpan.",
+                activities = responseDtos
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "ActivityController.CreateActivitiesBatch failed.");
+            return StatusCode(500, "Terjadi kesalahan saat menyimpan aktivitas sekaligus.");
         }
     }
 

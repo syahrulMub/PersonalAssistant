@@ -14,7 +14,7 @@ public class ParseVoiceResponseDto
 {
     public bool Success { get; set; }
     public string RawTranscript { get; set; } = string.Empty;
-    public CreateActivityDto? Activity { get; set; }
+    public List<CreateActivityDto> Activities { get; set; } = new();
     public string Message { get; set; } = string.Empty;
 }
 

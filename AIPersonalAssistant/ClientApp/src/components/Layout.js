@@ -23,7 +23,7 @@ export function Layout({ children }) {
       {/* 4. Global Subtle Footer untuk halaman selain Home */}
       {!isHome && (
         <footer className="w-full py-4 text-center text-xs font-mono text-slate-400 dark:text-[#94A3B8]/70 pb-24 lg:pb-6">
-          dev by syahrulMub @2026
+          dev by syahrulMub with AI @2026
         </footer>
       )}
     </div>

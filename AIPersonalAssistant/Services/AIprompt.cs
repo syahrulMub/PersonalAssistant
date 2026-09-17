@@ -62,35 +62,54 @@ public static class AIprompt
 
     public static string PromptParseActivityFromSpeechAsync(string currentTimeString, string dayOfWeek, string speechText) =>
     $@"
-        Kamu adalah asisten AI yang bertugas mengekstrak dan mem-parsing ucapan/suara pengguna menjadi model aktivitas terstruktur.
-        Waktu saat ini: {currentTimeString} WIB. Hari ini adalah hari: {dayOfWeek}.
+        Peran: Ekstraktor data aktivitas terstruktur dari transkrip ucapan.
+        Waktu referensi saat ini: {currentTimeString} WIB. Hari: {dayOfWeek}.
 
-        Kalimat Masukan Pengguna (dari transkrip suara):
+        Input Transkrip:
         ""{speechText}""
 
-        Aturan Ekstraksi:
-        1. 'title': Judul aktivitas yang ringkas dan jelas (maksimal 150 karakter).
-        2. 'description': Deskripsi aktivitas secara lengkap berdasarkan informasi yang diucapkan.
-        3. 'category': Pilih SATU kategori yang paling tepat dari daftar berikut:
-        - 'Productivity' (pekerjaan, tugas kantor, meeting, deadline)
-        - 'Learning' (belajar, membaca, kursus, riset)
-        - 'Health' (olahraga, makan, istirahat, dokter, obat)
-        - 'Personal' (keluarga, belanja, ibadah, hobi, urusan pribadi)
-        - 'General' (lainnya)
-        4. 'isReminder': Bernilai true jika kalimat mengandung indikasi waktu/pengingat/jadwal (misal: 'besok jam 9', 'nanti sore', 'ingatkan saya'), atau false jika tidak ada waktu spesifik.
-        5. 'remindAt': Jika 'isReminder' bernilai true, hitung dan tentukan tanggal dan waktu pengingat dalam format ISO-8601 (yyyy-MM-ddTHH:mm:ss) berdasarkan waktu referensi saat ini ({currentTimeString}). Jika tidak ada waktu yang ditentukan, isi null.
+        Aturan Ekstraksi & Standar Data:
 
-        Instruksi Format:
-        Kembalikan respon HANYA berupa JSON valid tanpa blok markdown (tanpa ```json ... ```) dan tanpa teks pembuka/penutup apapun.
+        1. Granularitas & Multi-Item:
+        - Evaluasi apakah input memuat beberapa agenda terpisah, serangkaian tugas berurutan, atau pembagian jadwal beberapa hari.
+        - Jika terdapat lebih dari satu entitas kegiatan, pecah secara modular menjadi objek terpisah dalam array JSON.
+        - Jika hanya memuat satu konteks kegiatan, hasilkan array dengan satu objek.
 
-        Format JSON wajib:
+        2. Konstruksi Judul ('title'):
+        - Berupa frasa tindakan langsung yang padat dan jelas.
+        - Representasikan inti kegiatan tanpa meta-pembuka (dilarang menggunakan atribusi pihak ketiga seperti 'Pengguna meminta...', 'Catatan untuk...', atau 'User ingin...').
+
+        3. Integritas Deskripsi ('description'):
+        - Pertahankan seluruh informasi faktual, daftar item, rincian teknis, pencapaian, dan kendala yang disebutkan tanpa memangkas substansinya.
+        - Bersihkan teks dari kata pengisi non-substansial (filler words, keraguan bicara, atau frasa komando seperti 'tolong buatkan', 'catat dong').
+        - Susun kembali tata bahasa menjadi kalimat terstruktur yang rapi, profesional, dan mencerminkan catatan kepemilikan langsung dari penutur.
+
+        4. Taksonomi Kategori ('category'):
+        Klasifikasikan secara objektif ke dalam salah satu nilai berikut:
+        - 'Productivity' : Pekerjaan, rekayasa/teknis, tugas profesional, rapat, tenggat waktu.
+        - 'Learning'     : Pembelajaran, literasi, riset, eksplorasi pengetahuan.
+        - 'Health'       : Aktivitas fisik, pemulihan, nutrisi, pola istirahat/kebugaran.
+        - 'Personal'     : Urusan pribadi, domestik, komitmen sosial, pengelolaan personal.
+        - 'General'      : Konteks di luar klasifikasi di atas.
+
+        5. Temporal & Pengingat ('isReminder', 'remindAt'):
+        - 'isReminder': Bernilai true jika entitas merujuk pada rencana/jadwal masa depan dengan parameter waktu yang dapat diidentifikasi. Bernilai false jika tidak ada indikasi waktu masa depan atau merupakan laporan pencapaian/aktivitas yang telah tuntas.
+        - 'remindAt': Hitung nilai waktu spesifik ke dalam format ISO-8601 (yyyy-MM-ddTHH:mm:ss) berdasarkan referensi waktu saat ini ({currentTimeString} WIB). Tetapkan null jika tidak ada indikasi waktu spesifik atau jika 'isReminder' bernilai false.
+
+        Format Output:
+        Hasilkan HANYA JSON Array valid tanpa pembungkus blok markdown (tanpa ```json) dan tanpa teks pembuka atau penutup.
+
+        Skema JSON:
+        [
         {{
-        ""title"": ""string"",
-        ""description"": ""string"",
-        ""category"": ""string"",
-        ""isReminder"": false,
-        ""remindAt"": null
-        }}";
+            ""title"": ""string"",
+            ""description"": ""string"",
+            ""category"": ""Productivity|Learning|Health|Personal|General"",
+            ""isReminder"": boolean,
+            ""remindAt"": ""string | null""
+        }}
+        ]
+        ";
     public static string BuildConsolidationPrompt(string candidatesJson, string existingMemoriesJson) =>
         $@"Anda adalah AI Memory Consolidation Engine. Tugas Anda mengevaluasi kandidat memori baru terhadap memori lama pengguna untuk mencegah fragmentasi dan duplikasi data.
 

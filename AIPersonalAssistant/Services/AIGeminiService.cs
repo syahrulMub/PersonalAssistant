@@ -294,7 +294,7 @@ public class AIGeminiService
         // Jika semua model dalam list telah dicoba dan seluruhnya gagal
         throw new InvalidOperationException($"Semua kandidat model Gemini gagal dieksekusi. Detail error terakhir: {lastErrorMessage}");
     }
-    public async Task<CreateActivityDto> ParseActivityFromSpeechAsync(string speechText, DateTime clientReferenceTime)
+    public async Task<List<CreateActivityDto>> ParseActivityFromSpeechAsync(string speechText, DateTime clientReferenceTime)
     {
         if (string.IsNullOrWhiteSpace(speechText))
         {
@@ -316,38 +316,81 @@ public class AIGeminiService
             PropertyNameCaseInsensitive = true
         };
 
+        var validCategories = new[] { "Productivity", "Learning", "Health", "Personal", "General" };
+
         try
         {
-            var parsed = JsonSerializer.Deserialize<CreateActivityDto>(cleanJson, options);
-            if (parsed == null || string.IsNullOrWhiteSpace(parsed.Title))
+            List<CreateActivityDto>? parsedList = null;
+
+            // Jika Gemini mengembalikan format JSON Array
+            if (cleanJson.StartsWith("["))
             {
-                return new CreateActivityDto
+                parsedList = JsonSerializer.Deserialize<List<CreateActivityDto>>(cleanJson, options);
+            }
+            else
+            {
+                // Fallback jika Gemini secara insidental mengembalikan format objek tunggal
+                var single = JsonSerializer.Deserialize<CreateActivityDto>(cleanJson, options);
+                if (single != null)
+                {
+                    parsedList = new List<CreateActivityDto> { single };
+                }
+            }
+
+            if (parsedList == null || parsedList.Count == 0)
+            {
+                return new List<CreateActivityDto>
+                {
+                    new CreateActivityDto
+                    {
+                        Title = speechText.Length > 50 ? speechText.Substring(0, 50) + "..." : speechText,
+                        Description = speechText,
+                        Category = "General",
+                        IsReminder = true,
+                        RemindAt = null
+                    }
+                };
+            }
+
+            // Normalisasi setiap item
+            var results = new List<CreateActivityDto>();
+            foreach (var item in parsedList)
+            {
+                if (string.IsNullOrWhiteSpace(item.Title)) continue;
+
+                var matchedCategory = validCategories.FirstOrDefault(c => c.Equals(item.Category, StringComparison.OrdinalIgnoreCase));
+                item.Category = matchedCategory ?? "General";
+                item.IsReminder = true;
+                results.Add(item);
+            }
+
+            if (results.Count == 0)
+            {
+                results.Add(new CreateActivityDto
                 {
                     Title = speechText.Length > 50 ? speechText.Substring(0, 50) + "..." : speechText,
                     Description = speechText,
                     Category = "General",
-                    IsReminder = false,
+                    IsReminder = true,
                     RemindAt = null
-                };
+                });
             }
 
-            // Normalisasi kategori
-            var validCategories = new[] { "Productivity", "Learning", "Health", "Personal", "General" };
-            var matchedCategory = validCategories.FirstOrDefault(c => c.Equals(parsed.Category, StringComparison.OrdinalIgnoreCase));
-            parsed.Category = matchedCategory ?? "General";
-
-            return parsed;
+            return results;
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to deserialize Gemini output as CreateActivityDto: {RawJson}", cleanJson);
-            return new CreateActivityDto
+            _logger.LogWarning(ex, "Failed to deserialize Gemini output as List<CreateActivityDto>: {RawJson}", cleanJson);
+            return new List<CreateActivityDto>
             {
-                Title = speechText.Length > 50 ? speechText.Substring(0, 50) + "..." : speechText,
-                Description = speechText,
-                Category = "General",
-                IsReminder = false,
-                RemindAt = null
+                new CreateActivityDto
+                {
+                    Title = speechText.Length > 50 ? speechText.Substring(0, 50) + "..." : speechText,
+                    Description = speechText,
+                    Category = "General",
+                    IsReminder = true,
+                    RemindAt = null
+                }
             };
         }
     }
