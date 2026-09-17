@@ -47,7 +47,7 @@ export function DesktopNavbar() {
         {/* Left: Brand Logo & Title */}
         <Link to="/" className="flex items-center gap-3 group">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-ai-violet-600 via-ai-violet-500 to-sage-500 flex items-center justify-center text-white shadow-glow-violet transition-transform duration-200 group-hover:scale-105">
-            <BsStars className="text-lg animate-pulse" />
+            <BsStars className="text-lg animate-twinkle" />
           </div>
           <div className="flex flex-col">
             <div className="flex items-center gap-2">

@@ -152,7 +152,7 @@ export function MobileNavigation() {
         {/* Brand Logo & Date */}
         <Link to="/" className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-ai-violet-600 via-ai-violet-500 to-sage-500 flex items-center justify-center text-white shadow-glow-violet">
-            <BsStars className="text-sm" />
+            <BsStars className="text-sm animate-twinkle" />
           </div>
           <div className="flex flex-col">
             <span
@@ -223,7 +223,7 @@ export function MobileNavigation() {
                 ? "none"
                 : "transform 0.28s cubic-bezier(0.32, 0.72, 0, 1)",
             }}
-            className={`rounded-t-3xl border-t shadow-2xl h-[75vh] max-h-[82vh] flex flex-col overflow-hidden transition-colors ${
+            className={`rounded-t-3xl border-t shadow-2xl h-[50vh] max-h-[50vh] flex flex-col overflow-hidden transition-colors ${
               isDark
                 ? "bg-[#1E293B] text-[#F8FAFC] border-[#334155]"
                 : "bg-[#FFFFFF] text-[#0F172A] border-[#E2E8F0]"
@@ -234,14 +234,14 @@ export function MobileNavigation() {
               onTouchStart={handleTouchStart}
               onTouchMove={handleTouchMove}
               onTouchEnd={handleTouchEnd}
-              className={`flex-shrink-0 px-5 pt-3 pb-3.5 border-b select-none cursor-grab active:cursor-grabbing touch-none transition-colors ${
+              className={`flex-shrink-0 px-5 pt-2.5 pb-2.5 border-b select-none cursor-grab active:cursor-grabbing touch-none transition-colors ${
                 isDark
                   ? "bg-[#1E293B] border-[#334155]"
                   : "bg-[#FFFFFF] border-[#E2E8F0]"
               }`}
             >
               {/* Visual Drag Pill Bar */}
-              <div className="w-full flex items-center justify-center pb-2">
+              <div className="w-full flex items-center justify-center pb-1.5">
                 <div
                   className={`h-1.5 rounded-full transition-all duration-150 ${
                     dragY > 20
@@ -318,7 +318,7 @@ export function MobileNavigation() {
               onTouchStart={handleContentTouchStart}
               onTouchMove={handleContentTouchMove}
               onTouchEnd={handleTouchEnd}
-              className="flex-1 overflow-y-auto px-5 py-4 pb-24 space-y-4 overscroll-contain"
+              className="flex-1 overflow-y-auto px-5 py-3 pb-20 space-y-3 overscroll-contain"
             >
               {/* SECTION: NAVIGASI CEPAT */}
               <div>
@@ -514,22 +514,49 @@ export function MobileNavigation() {
             )}
           </Link>
 
-          {/* Tab 3: [Reflect] (Tombol Floating Ungu/Glow Bulat Tepat di Tengah) */}
+          {/* Tab 3: [Reflect] (Tombol Diam, Partikel Antigravity & 2-3 Base Warna) */}
           <Link
             to="/activity"
             title="Refleksi Cepat"
             className="flex flex-col items-center -mt-5 group"
           >
+            {/* Lingkaran Tombol Diam (Statis & Overflow Hidden) */}
             <div
-              className={`w-12 h-12 rounded-full bg-gradient-to-tr from-ai-violet-600 via-ai-violet-500 to-sage-500 text-white flex items-center justify-center shadow-glow-violet transition-transform active:scale-95 group-hover:scale-105 border-2 ${
-                isDark ? "border-[#090D16]" : "border-white"
+              className={`w-12 h-12 rounded-full relative overflow-hidden flex items-center justify-center shadow-lg transition-transform duration-200 active:scale-95 group-hover:scale-105 border-2 ${
+                isDark
+                  ? "border-[#090D16] shadow-ai-violet-950/60"
+                  : "border-white shadow-ai-violet-500/25"
               }`}
             >
-              <BsStars className="text-xl animate-pulse" />
+              {/* 1. Internal Rotating Gradient (Hanya 2-3 Base Warna: AI Violet #7C3AED & Sage Green #3D996E) */}
+              <div className="absolute -inset-2 bg-[conic-gradient(from_0deg,#7C3AED,#3D996E,#8B5CF6,#7C3AED)] animate-spin-slow opacity-85 blur-[1px]" />
+
+              {/* 2. Frosted Inner Glass Mask untuk Kedalaman & Kontras */}
+              <div className="absolute inset-[2px] rounded-full bg-slate-950/25 dark:bg-slate-950/45 backdrop-blur-[0.5px]" />
+
+              {/* 3. Partikel Titik-Titik Kecil Bergerak Mengorbit (Signature Antigravity Particles) */}
+              <div className="absolute inset-0 flex items-center justify-center animate-[spin_8s_linear_infinite] pointer-events-none">
+                {/* Titik 1: Atas Kanan */}
+                <span className="absolute top-2 right-2.5 w-1.5 h-1.5 rounded-full bg-white/95 shadow-[0_0_5px_rgba(255,255,255,0.9)] animate-pulse" />
+                {/* Titik 2: Bawah Kiri */}
+                <span className="absolute bottom-2.5 left-2 w-1 h-1 rounded-full bg-sage-300 shadow-[0_0_4px_rgba(149,205,177,0.9)]" />
+                {/* Titik 3: Atas Kiri Mikro */}
+                <span className="absolute top-3 left-2.5 w-1 h-1 rounded-full bg-ai-violet-200 shadow-[0_0_4px_rgba(221,214,254,0.8)] animate-pulse delay-100" />
+              </div>
+
+              {/* 4. Ikon Utama BsStars (3 Bintang) Berkilau Halus di Tengah */}
+              <div className="relative z-10 text-white flex items-center justify-center animate-twinkle">
+                <BsStars className="text-xl drop-shadow-[0_0_6px_rgba(255,255,255,0.75)]" />
+              </div>
             </div>
+
             <span
-              className={`text-[10px] font-semibold mt-1 ${
-                isDark ? "text-[#F8FAFC]" : "text-[#0F172A]"
+              className={`text-[10px] font-semibold mt-1 transition-colors ${
+                isActive("/activity")
+                  ? "text-ai-violet-600 dark:text-ai-violet-400 font-bold"
+                  : isDark
+                    ? "text-[#94A3B8] group-hover:text-[#F8FAFC]"
+                    : "text-slate-500 group-hover:text-slate-900"
               }`}
             >
               Reflect

@@ -76,6 +76,31 @@ module.exports = {
       backdropBlur: {
         xs: "2px",
       },
+      keyframes: {
+        float: {
+          "0%, 100%": { transform: "translateY(0px)" },
+          "50%": { transform: "translateY(-5px)" },
+        },
+        "pulse-glow": {
+          "0%, 100%": { opacity: "0.5", transform: "scale(0.96)" },
+          "50%": { opacity: "0.95", transform: "scale(1.1)" },
+        },
+        twinkle: {
+          "0%, 100%": {
+            transform: "scale(1) rotate(0deg)",
+            filter: "drop-shadow(0 0 2px rgba(255, 255, 255, 0.4))",
+          },
+          "50%": {
+            transform: "scale(1.15) rotate(12deg)",
+            filter: "drop-shadow(0 0 6px rgba(255, 255, 255, 0.9))",
+          },
+        },
+      },
+      animation: {
+        float: "float 3s ease-in-out infinite",
+        "pulse-glow": "pulse-glow 2.5s ease-in-out infinite",
+        twinkle: "twinkle 2.4s ease-in-out infinite",
+      },
     },
   },
   plugins: [],
