@@ -1,18 +1,33 @@
-import React, { Component } from 'react';
-import { Container } from 'reactstrap';
-import { NavMenu } from './NavMenu';
+import React from "react";
+import { useLocation } from "react-router-dom";
+import { DesktopNavbar } from "./navigation/DesktopNavbar";
+import { MobileNavigation } from "./navigation/MobileNavigation";
 
-export class Layout extends Component {
-  static displayName = Layout.name;
+export function Layout({ children }) {
+  const location = useLocation();
+  const isHome = location.pathname === "/";
 
-  render() {
-    return (
-      <div>
-        <NavMenu />
-        <Container tag="main">
-          {this.props.children}
-        </Container>
-      </div>
-    );
-  }
+  return (
+    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-deep-950 text-slate-900 dark:text-slate-100 font-sans transition-colors duration-200 selection:bg-sage-200 selection:text-sage-900 dark:selection:bg-sage-900 dark:selection:text-sage-200">
+      {/* 1. Desktop Navbar (Linear/Raycast Style) */}
+      <DesktopNavbar />
+
+      {/* 2. Mobile Top Header & Bottom Dock (Apple Style) */}
+      <MobileNavigation />
+
+      {/* 3. Main Content Wrapper */}
+      <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-28 lg:pb-12 animate-fade-in">
+        {children}
+      </main>
+
+      {/* 4. Global Subtle Footer untuk halaman selain Home */}
+      {!isHome && (
+        <footer className="w-full py-4 text-center text-xs font-mono text-slate-400 dark:text-[#94A3B8]/70 pb-24 lg:pb-6">
+          dev by syahrulMub @2026
+        </footer>
+      )}
+    </div>
+  );
 }
+
+export default Layout;

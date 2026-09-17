@@ -7,7 +7,6 @@ public class ActivityResponseDto
     public string? Description { get; set; }
     public string? Category { get; set; }
     public string Status { get; set; } = "Pending";
-    public bool IsCompleted { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? RemindAt { get; set; }
     public DateTime? OriginalRemindAt { get; set; }

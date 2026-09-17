@@ -22,15 +22,20 @@ public class AIMemoryService : IAIMemoryService
     public async Task ProcessDailyMemoriesAsync(int userId)
     {
         var lookback = DateTime.UtcNow.AddDays(-1);
-        var unprocessedActivities = await _dbContext.ActivityLogs
+        var activitiesToProcess = await _dbContext.ActivityLogs
             .Where(a => a.UserId == userId &&
-                        !_dbContext.AIMemoryObservations.Any(obs => obs.SourceType == "Activity" && obs.SourceId == a.Id))
+                (
+                    // Belum pernah disinkronkan ATAU diubah setelah terakhir disinkronkan
+                    a.MemorySyncedAt == null ||
+                    (a.UpdatedAt > a.MemorySyncedAt)
+                )
+            )
             .OrderBy(a => a.CreateAt)
             .Take(50)
-            .Select(a => new { a.Id, a.Title, a.Description, a.Status, a.CreateAt })
+            .Select(a => new { a.Id, a.Title, a.Description, a.Status, a.CreateAt, a.UpdatedAt, a.MemorySyncedAt })
             .ToListAsync();
 
-        if (!unprocessedActivities.Any())
+        if (!activitiesToProcess.Any())
         {
             _logger.LogInformation("Tidak ada aktivitas untuk diproses pada User {UserId}", userId);
             return;
@@ -52,7 +57,7 @@ public class AIMemoryService : IAIMemoryService
 
 
 
-        var activitiesJson = JsonSerializer.Serialize(unprocessedActivities);
+        var activitiesJson = JsonSerializer.Serialize(activitiesToProcess);
         var extractionPrompt = AIprompt.BuildExtractionPrompt(activitiesJson, topicsCatalogText);
 
         var extractionResultJson = await _aiClient.ExecuteGeminiJsonApi(extractionPrompt);
@@ -97,6 +102,17 @@ public class AIMemoryService : IAIMemoryService
 
         if (decisions == null || !decisions.Any()) return;
         await PersistMemoryDecisionsAsync(userId, decisions);
+        var processedIds = activitiesToProcess.Select(a => a.Id).ToList();
+
+        if (processedIds.Count > 0)
+        {
+            var syncTime = DateTime.UtcNow;
+
+            await _dbContext.ActivityLogs
+                .Where(a => processedIds.Contains(a.Id))
+                .ExecuteUpdateAsync(setter => setter.SetProperty(a => a.MemorySyncedAt, syncTime));
+        }
+        await _dbContext.SaveChangesAsync();
 
     }
     private async Task PersistMemoryDecisionsAsync(int userId, List<MemoryDecisionDto> decisions, CancellationToken cancellationToken = default)

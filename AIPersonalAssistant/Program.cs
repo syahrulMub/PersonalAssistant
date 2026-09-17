@@ -178,7 +178,7 @@ RecurringJob.AddOrUpdate<SchedulerMethod>(
 RecurringJob.AddOrUpdate<SchedulerMethod>(
     "AI-daily-memory",
     job => job.CompileDailyAIMemoryFromActivity(),
-    "0 8 * * *",
+    "0 3,10,21 * * *",
     new RecurringJobOptions
     {
         TimeZone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Jakarta")

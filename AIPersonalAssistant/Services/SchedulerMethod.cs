@@ -202,7 +202,7 @@ FORMAT OUTPUT (Wajib JSON valid murni tanpa markdown):
                     _logger.LogInformation("Memproses AI Memory untuk User ID: {UserId}", userId);
 
                     await _aiMemoryService.ProcessDailyMemoriesAsync(userId);
-                    await Task.Delay(TimeSpan.FromSeconds(4));
+                    await Task.Delay(TimeSpan.FromSeconds(10));
 
                     _logger.LogInformation("Selesai memproses AI Memory untuk User ID: {UserId}", userId);
                 }

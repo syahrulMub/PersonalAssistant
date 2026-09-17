@@ -17,8 +17,9 @@ public class ActivityLogs
     public int RescheduleCount { get; set; } = 0;
 
     public DateTime CreateAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
-
+    public DateTime? MemorySyncedAt { get; set; }
     public string? ResolutionSource { get; set; } // misal: "VoiceReflection", "ManualUI", "EmailDigest"
     public string? Note { get; set; }
     public virtual int UserId { get; set; }
