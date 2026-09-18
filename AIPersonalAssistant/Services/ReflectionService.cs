@@ -49,7 +49,7 @@ public class ReflectionService
 
         // 2. Tugas Menggantung / Perlu Perhatian (Hari ini & yang terlewat)
         var pendingTasks = await _dbContext.ActivityLogs
-            .Where(a => a.UserId == userId && (a.Status == "Pending" || a.Status == "Rescheduled") && a.ReminderTime <= endOfToday)
+            .Where(a => a.UserId == userId && (a.Status == "Pending" || a.Status == "Rescheduled") && a.ReminderTime <= DateTime.Now)
             .OrderByDescending(a => a.ReminderTime)
             .Select(a => new { a.Id, a.Title, a.ReminderTime, a.RescheduleCount })
             .ToListAsync(ct);
