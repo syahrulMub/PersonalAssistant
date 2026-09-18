@@ -60,9 +60,9 @@ public class ApiLogService
 
     private void WriteLog(string level, string message, string? controller = null, string? action = null, string? clientIp = null, string? details = null)
     {
-        var date = DateTime.UtcNow.ToString("yyyy-MM-dd");
+        var date = DateTime.Now.ToString("yyyy-MM-dd");
         var logFilePath = Path.Combine(_logsDirectory, $"api-{date}.log");
-        var logLine = $"{DateTimeOffset.UtcNow:O} | {level} | {controller ?? "-"} | {action ?? "-"} | {clientIp ?? "-"} | {message} | {details ?? string.Empty}";
+        var logLine = $"{DateTimeOffset.Now:O} | {level} | {controller ?? "-"} | {action ?? "-"} | {clientIp ?? "-"} | {message} | {details ?? string.Empty}";
 
         File.AppendAllText(logFilePath, logLine + Environment.NewLine);
     }
@@ -70,7 +70,7 @@ public class ApiLogService
     public int GetLogCount(string? date = null)
     {
         var targetDate = string.IsNullOrWhiteSpace(date)
-            ? DateTime.UtcNow.ToString("yyyy-MM-dd")
+            ? DateTime.Now.ToString("yyyy-MM-dd")
             : date;
 
         var logFilePath = Path.Combine(_logsDirectory, $"api-{targetDate}.log");
@@ -85,7 +85,7 @@ public class ApiLogService
     public IReadOnlyList<string> ReadLogs(int page = 1, int pageSize = 100, string? date = null)
     {
         var targetDate = string.IsNullOrWhiteSpace(date)
-            ? DateTime.UtcNow.ToString("yyyy-MM-dd")
+            ? DateTime.Now.ToString("yyyy-MM-dd")
             : date;
 
         var logFilePath = Path.Combine(_logsDirectory, $"api-{targetDate}.log");

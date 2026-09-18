@@ -51,12 +51,12 @@ public class ActivityController : ControllerBase
 
             var query = _dbContext.ActivityLogs.Where(x => x.UserId == userId);
 
-            var todayWib = DateTime.UtcNow.Date;
-            var startOfTodayUtc = todayWib;
-            var endOfTodayUtc = startOfTodayUtc.AddDays(1).AddTicks(-1);
+            var todayLocal = DateTime.Now.Date;
+            var startOfToday = todayLocal;
+            var endOfToday = startOfToday.AddDays(1).AddTicks(-1);
 
             var overdueCount = await _dbContext.ActivityLogs
-                .Where(x => x.UserId == userId && x.Status != "Completed" && x.Status != "Cancelled" && (x.ReminderTime ?? x.CreateAt) < startOfTodayUtc)
+                .Where(x => x.UserId == userId && x.Status != "Completed" && x.Status != "Cancelled" && (x.ReminderTime ?? x.CreateAt) < startOfToday)
                 .CountAsync();
 
             if (!string.IsNullOrWhiteSpace(timeline))
@@ -65,18 +65,18 @@ public class ActivityController : ControllerBase
 
                 if (timelineLower == "today")
                 {
-                    // Fokus Hari Ini: tugas hari ini (WIB) berdasarkan ReminderTime atau CreateAt dari database
-                    query = query.Where(x => x.Status != "Completed" && x.Status != "Cancelled" && ((x.ReminderTime ?? x.CreateAt) >= startOfTodayUtc && (x.ReminderTime ?? x.CreateAt) <= endOfTodayUtc));
+                    // Fokus Hari Ini: tugas hari ini berdasarkan waktu lokal komputer
+                    query = query.Where(x => x.Status != "Completed" && x.Status != "Cancelled" && ((x.ReminderTime ?? x.CreateAt) >= startOfToday && (x.ReminderTime ?? x.CreateAt) <= endOfToday));
                 }
                 else if (timelineLower == "upcoming")
                 {
                     // Mendatang: tugas besok dan seterusnya
-                    query = query.Where(x => x.Status != "Completed" && x.Status != "Cancelled" && (x.ReminderTime ?? x.CreateAt) > endOfTodayUtc);
+                    query = query.Where(x => x.Status != "Completed" && x.Status != "Cancelled" && (x.ReminderTime ?? x.CreateAt) > endOfToday);
                 }
                 else if (timelineLower == "overdue")
                 {
                     // Terlewat: tugas kemarin atau sebelumnya yang belum selesai
-                    query = query.Where(x => x.Status != "Completed" && x.Status != "Cancelled" && (x.ReminderTime ?? x.CreateAt) < startOfTodayUtc);
+                    query = query.Where(x => x.Status != "Completed" && x.Status != "Cancelled" && (x.ReminderTime ?? x.CreateAt) < startOfToday);
                 }
                 else if (timelineLower == "completed")
                 {
@@ -93,19 +93,19 @@ public class ActivityController : ControllerBase
             IOrderedQueryable<ActivityLogs> orderedQuery;
             if (timeline?.Equals("upcoming", StringComparison.OrdinalIgnoreCase) == true)
             {
-                orderedQuery = query.OrderBy(a => a.ReminderTime ?? a.CreateAt);
+                orderedQuery = query.OrderBy(a => a.ReminderTime ?? a.CreateAt).ThenByDescending(a => a.Id);
             }
             else if (timeline?.Equals("overdue", StringComparison.OrdinalIgnoreCase) == true)
             {
-                orderedQuery = query.OrderBy(a => a.ReminderTime ?? a.CreateAt);
+                orderedQuery = query.OrderBy(a => a.ReminderTime ?? a.CreateAt).ThenByDescending(a => a.Id);
             }
             else if (status?.Equals("Completed", StringComparison.OrdinalIgnoreCase) == true || timeline?.Equals("completed", StringComparison.OrdinalIgnoreCase) == true)
             {
-                orderedQuery = query.OrderByDescending(a => a.CompletedAt ?? a.CreateAt);
+                orderedQuery = query.OrderByDescending(a => a.CompletedAt ?? a.CreateAt).ThenByDescending(a => a.Id);
             }
             else
             {
-                orderedQuery = query.OrderByDescending(a => a.ReminderTime ?? a.CreateAt);
+                orderedQuery = query.OrderByDescending(a => a.ReminderTime ?? a.CreateAt).ThenByDescending(a => a.Id);
             }
 
             var items = await orderedQuery
@@ -206,35 +206,37 @@ public class ActivityController : ControllerBase
                 return BadRequest(ModelState);
             }
 
-            if (!createActivityDto.RemindAt.HasValue)
-            {
-                return BadRequest(new { message = "Waktu jadwal kegiatan wajib diisi." });
-            }
-
-            var remindAtUtc = createActivityDto.RemindAt.Value.Kind == DateTimeKind.Utc
-                ? createActivityDto.RemindAt.Value
-                : createActivityDto.RemindAt.Value.ToUniversalTime();
-
-            if (remindAtUtc <= DateTime.UtcNow)
-            {
-                return BadRequest(new { message = "Waktu jadwal kegiatan harus lebih besar dari waktu sekarang (UTC now)." });
-            }
-
             int userId = User.GetUserId();
+            bool hasSchedule = createActivityDto.RemindAt.HasValue;
+            DateTime? remindAtLocal = null;
+
+            if (hasSchedule)
+            {
+                remindAtLocal = createActivityDto.RemindAt.Value.Kind == DateTimeKind.Utc
+                    ? createActivityDto.RemindAt.Value.ToLocalTime()
+                    : createActivityDto.RemindAt.Value;
+
+                if (remindAtLocal <= DateTime.Now)
+                {
+                    return BadRequest(new { message = "Waktu jadwal kegiatan harus lebih besar dari waktu sekarang." });
+                }
+            }
+
             var activity = new ActivityLogs
             {
-                Title = createActivityDto.Title,
-                Description = createActivityDto.Description,
-                Category = string.IsNullOrWhiteSpace(createActivityDto.Category) ? "General" : createActivityDto.Category,
-                IsReminder = createActivityDto.IsReminder,
-                ReminderTime = remindAtUtc,
-                OriginalReminderTime = remindAtUtc,
-                Status = "Pending",
+                Title = createActivityDto.Title.Trim(),
+                Description = createActivityDto.Description.Trim(),
+                Category = string.IsNullOrWhiteSpace(createActivityDto.Category) ? "General" : createActivityDto.Category.Trim(),
+                IsReminder = hasSchedule && createActivityDto.IsReminder,
+                ReminderTime = remindAtLocal,
+                OriginalReminderTime = remindAtLocal,
+                Status = hasSchedule ? "Pending" : "Completed",
                 RescheduleCount = 0,
-                CreateAt = DateTime.UtcNow,
+                CreateAt = DateTime.Now,
+                UpdatedAt = DateTime.Now,
                 UserId = userId,
                 ResolutionSource = "ManualUI",
-                CompletedAt = null,
+                CompletedAt = hasSchedule ? null : DateTime.Now,
             };
 
             _dbContext.ActivityLogs.Add(activity);
@@ -299,7 +301,7 @@ public class ActivityController : ControllerBase
                     activity.Note = dto.Note;
                 }
 
-                activity.UpdatedAt = DateTime.UtcNow;
+                activity.UpdatedAt = DateTime.Now;
                 await _dbContext.SaveChangesAsync();
 
                 _logger.LogInformation("ActivityController.UpdateActivity (Completed description only) completed. id={Id}", id);
@@ -343,17 +345,17 @@ public class ActivityController : ControllerBase
 
             if (dto.RemindAt.HasValue)
             {
-                var remindAtUtc = dto.RemindAt.Value.Kind == DateTimeKind.Utc
-                    ? dto.RemindAt.Value
-                    : dto.RemindAt.Value.ToUniversalTime();
+                var remindAtLocal = dto.RemindAt.Value.Kind == DateTimeKind.Utc
+                    ? dto.RemindAt.Value.ToLocalTime()
+                    : dto.RemindAt.Value;
 
-                if (remindAtUtc <= DateTime.UtcNow)
+                if (remindAtLocal <= DateTime.Now)
                 {
-                    return BadRequest(new { message = "Waktu jadwal kegiatan harus lebih besar dari waktu sekarang (UTC now)." });
+                    return BadRequest(new { message = "Waktu jadwal kegiatan harus lebih besar dari waktu sekarang." });
                 }
 
                 // Jika waktu jadwal diubah dan sebelumnya sudah ada jadwal
-                if (activity.ReminderTime.HasValue && Math.Abs((activity.ReminderTime.Value - remindAtUtc).TotalMinutes) > 1)
+                if (activity.ReminderTime.HasValue && Math.Abs((activity.ReminderTime.Value - remindAtLocal).TotalMinutes) > 1)
                 {
                     activity.Status = "Rescheduled";
                     activity.RescheduleCount += 1;
@@ -364,7 +366,7 @@ public class ActivityController : ControllerBase
                 {
                     activity.IsReminder = dto.IsReminder.Value;
                 }
-                activity.ReminderTime = remindAtUtc;
+                activity.ReminderTime = remindAtLocal;
             }
             else if (dto.IsReminder.HasValue)
             {
@@ -374,7 +376,7 @@ public class ActivityController : ControllerBase
             if (!string.IsNullOrWhiteSpace(dto.Status) && dto.Status.Equals("Completed", StringComparison.OrdinalIgnoreCase))
             {
                 activity.Status = "Completed";
-                activity.CompletedAt = DateTime.UtcNow;
+                activity.CompletedAt = DateTime.Now;
                 activity.ResolutionSource = dto.ResolutionSource ?? "ManualCheck";
                 activity.IsReminder = false; // Selesai: reminder email harus false
             }
@@ -390,7 +392,7 @@ public class ActivityController : ControllerBase
                 activity.Note = dto.Note;
             }
 
-            activity.UpdatedAt = DateTime.UtcNow;
+            activity.UpdatedAt = DateTime.Now;
 
             await _dbContext.SaveChangesAsync();
 
@@ -464,7 +466,7 @@ public class ActivityController : ControllerBase
             else
             {
                 activity.Status = "Completed";
-                activity.CompletedAt = DateTime.UtcNow;
+                activity.CompletedAt = DateTime.Now;
                 activity.ResolutionSource = dto.ResolutionSource ?? "ManualCheck";
                 activity.IsReminder = false; // Selesai: reminder email harus false
             }
@@ -474,7 +476,7 @@ public class ActivityController : ControllerBase
                 activity.Note = dto.Note;
             }
 
-            activity.UpdatedAt = DateTime.UtcNow;
+            activity.UpdatedAt = DateTime.Now;
 
             await _dbContext.SaveChangesAsync();
 
@@ -524,19 +526,7 @@ public class ActivityController : ControllerBase
 
             _logger.LogInformation("ActivityController.ParseFromVoice called. SpeechTextLength={Length}", dto.SpeechText.Length);
 
-            DateTime clientNow = DateTime.UtcNow.AddHours(7);
-            if (!string.IsNullOrWhiteSpace(dto.ClientTimeZone))
-            {
-                try
-                {
-                    var tz = TimeZoneInfo.FindSystemTimeZoneById(dto.ClientTimeZone);
-                    clientNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
-                }
-                catch
-                {
-                    // Fallback to GMT+7
-                }
-            }
+            DateTime clientNow = DateTime.Now;
 
             var parsedActivities = await _aiGeminiService.ParseActivityFromSpeechAsync(dto.SpeechText, clientNow);
 
@@ -592,12 +582,13 @@ public class ActivityController : ControllerBase
                     continue;
                 }
 
-                DateTime? remindAtUtc = null;
-                if (dto.RemindAt.HasValue)
+                DateTime? remindAtLocal = null;
+                bool hasSchedule = dto.RemindAt.HasValue;
+                if (hasSchedule)
                 {
-                    remindAtUtc = dto.RemindAt.Value.Kind == DateTimeKind.Utc
-                        ? dto.RemindAt.Value
-                        : dto.RemindAt.Value.ToUniversalTime();
+                    remindAtLocal = dto.RemindAt.Value.Kind == DateTimeKind.Utc
+                        ? dto.RemindAt.Value.ToLocalTime()
+                        : dto.RemindAt.Value;
                 }
 
                 var activity = new ActivityLogs
@@ -605,15 +596,16 @@ public class ActivityController : ControllerBase
                     Title = dto.Title.Trim(),
                     Description = dto.Description?.Trim() ?? string.Empty,
                     Category = string.IsNullOrWhiteSpace(dto.Category) ? "General" : dto.Category.Trim(),
-                    IsReminder = dto.IsReminder,
-                    ReminderTime = remindAtUtc,
-                    OriginalReminderTime = remindAtUtc,
-                    Status = "Pending",
+                    IsReminder = hasSchedule && dto.IsReminder,
+                    ReminderTime = remindAtLocal,
+                    OriginalReminderTime = remindAtLocal,
+                    Status = hasSchedule ? "Pending" : "Completed",
                     RescheduleCount = 0,
-                    CreateAt = DateTime.UtcNow,
+                    CreateAt = DateTime.Now,
+                    UpdatedAt = DateTime.Now,
                     UserId = userId,
                     ResolutionSource = "VoiceBatch",
-                    CompletedAt = null
+                    CompletedAt = hasSchedule ? null : DateTime.Now
                 };
 
                 createdActivities.Add(activity);

@@ -5,7 +5,7 @@ const initialState = {
   title: "",
   description: "",
   category: "Productivity",
-  isReminder: true,
+  isReminder: false,
   remindAt: "",
 };
 
@@ -40,14 +40,17 @@ export function CreateActivity({
         }
       }
 
+      const hasSchedule = Boolean(formattedRemindAt);
+
       setFormData({
         title: initialData.title || "",
         description: initialData.description || "",
         category: initialData.category || "General",
-        isReminder:
-          initialData.isReminder !== undefined
+        isReminder: hasSchedule
+          ? initialData.isReminder !== undefined
             ? Boolean(initialData.isReminder)
-            : true,
+            : true
+          : false,
         remindAt: formattedRemindAt,
       });
     } else {
@@ -72,17 +75,16 @@ export function CreateActivity({
       return;
     }
 
-    if (!formData.remindAt) {
-      setErrorMessage("Waktu jadwal kegiatan wajib diisi.");
-      return;
-    }
+    const hasSchedule = Boolean(formData.remindAt);
 
-    const scheduledDate = new Date(formData.remindAt);
-    if (isNaN(scheduledDate.getTime()) || scheduledDate <= new Date()) {
-      setErrorMessage(
-        "Waktu jadwal kegiatan harus lebih besar dari waktu sekarang.",
-      );
-      return;
+    if (hasSchedule) {
+      const scheduledDate = new Date(formData.remindAt);
+      if (isNaN(scheduledDate.getTime()) || scheduledDate <= new Date()) {
+        setErrorMessage(
+          "Waktu jadwal kegiatan harus lebih besar dari waktu sekarang.",
+        );
+        return;
+      }
     }
 
     setLoading(true);
@@ -92,8 +94,12 @@ export function CreateActivity({
         title: formData.title.trim(),
         description: formData.description.trim(),
         category: formData.category || "General",
-        isReminder: Boolean(formData.isReminder),
-        remindAt: scheduledDate.toISOString(),
+        isReminder: hasSchedule ? Boolean(formData.isReminder) : false,
+        remindAt: hasSchedule
+          ? formData.remindAt.length === 16
+            ? `${formData.remindAt}:00`
+            : formData.remindAt
+          : null,
       };
 
       const token = localStorage.getItem("token");
@@ -223,44 +229,70 @@ export function CreateActivity({
         />
       </div>
 
-      {/* Input Waktu Jadwal Kegiatan */}
+      {/* Input Waktu Jadwal Kegiatan (Opsional) */}
       <div>
-        <label className="block text-xs font-mono uppercase tracking-wider font-semibold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
-          <BsClock className="text-amber-500" />
-          <span>Waktu Jadwal Kegiatan (WIB) *</span>
+        <label className="block text-xs font-mono uppercase tracking-wider font-semibold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
+          <span className="flex items-center gap-1.5">
+            <BsClock className="text-amber-500" />
+            <span>Waktu Jadwal Pengingat (Opsional)</span>
+          </span>
+          <span className="text-[11px] font-normal text-slate-400">
+            {formData.remindAt
+              ? "⏰ Mode Jadwal Pengingat"
+              : "🏆 Mode Pencapaian Langsung"}
+          </span>
         </label>
         <input
           type="datetime-local"
           name="remindAt"
           value={formData.remindAt}
-          onChange={handleChange}
+          onChange={(e) => {
+            const val = e.target.value;
+            setFormData((prev) => ({
+              ...prev,
+              remindAt: val,
+              isReminder: true,
+            }));
+          }}
           disabled={loading}
-          required
           className="w-full px-3.5 py-2.5 text-sm rounded-xl border bg-white dark:bg-[#0F172A] border-slate-200 dark:border-[#334155] text-slate-900 dark:text-[#F8FAFC] font-mono focus:outline-none focus:ring-2 focus:ring-ai-violet-500/50 [color-scheme:light] dark:[color-scheme:dark]"
         />
         <small className="text-[11px] text-slate-400 mt-1 block">
-          Tentukan jam/tanggal kegiatan (harus lebih besar dari waktu sekarang).
+          Tentukan jam jika ingin dijadwalkan ke depan. Kosongkan jika ini
+          adalah catatan pencapaian yang sudah tuntas.
         </small>
       </div>
 
-      {/* Toggle Reminder Email Opsional */}
-      <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-[#0F172A] border border-slate-200 dark:border-[#334155] flex items-center justify-between">
+      {/* Toggle Reminder Email (Hanya aktif jika ada jadwal) */}
+      <div
+        className={`p-3.5 rounded-2xl border transition-all flex items-center justify-between ${
+          formData.remindAt
+            ? "bg-slate-50 dark:bg-[#0F172A] border-slate-200 dark:border-[#334155]"
+            : "bg-slate-100/60 dark:bg-[#0F172A]/40 border-slate-200/50 dark:border-[#334155]/40 opacity-60"
+        }`}
+      >
         <div>
           <span className="text-xs font-mono uppercase tracking-wider font-bold text-slate-800 dark:text-slate-200 block">
             Kirim Pengingat Email
           </span>
           <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
-            Background reminder akan mengirim email notifikasi tepat waktu.
+            {formData.remindAt
+              ? "Background reminder akan mengirim email notifikasi tepat waktu."
+              : "Isi waktu jadwal di atas untuk mengaktifkan notifikasi email pengingat."}
           </span>
         </div>
 
-        <label className="relative inline-flex items-center cursor-pointer">
+        <label
+          className={`relative inline-flex items-center ${
+            formData.remindAt ? "cursor-pointer" : "cursor-not-allowed"
+          }`}
+        >
           <input
             type="checkbox"
             name="isReminder"
-            checked={formData.isReminder}
+            checked={Boolean(formData.remindAt && formData.isReminder)}
             onChange={handleChange}
-            disabled={loading}
+            disabled={loading || !formData.remindAt}
             className="sr-only peer"
           />
           <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-ai-violet-600" />

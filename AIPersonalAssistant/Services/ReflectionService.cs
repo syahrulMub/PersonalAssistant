@@ -23,7 +23,7 @@ public class ReflectionService
 
     public async Task<ReflectionContextDto> GetReflectionContextAsync(int userId, string contextType = "Daily", CancellationToken ct = default)
     {
-        var now = DateTime.UtcNow;
+        var now = DateTime.Now;
         var lookbackDate = contextType.Equals("Weekly", StringComparison.OrdinalIgnoreCase)
             ? now.Date.AddDays(-7)
             : now.Date.AddDays(-1);
@@ -36,10 +36,10 @@ public class ReflectionService
             .ToListAsync(ct);
         var activeMemoriesJson = JsonSerializer.Serialize(activeMemories);
 
-        // Batas akhir hari ini (UTC) agar jadwal masa depan tidak ikut tertarik
+        // Batas akhir hari ini (Lokal) agar jadwal masa depan tidak ikut tertarik
         var endOfToday = now.Date.AddDays(1).AddTicks(-1);
 
-        var todayStart = DateTime.UtcNow.Date;
+        var todayStart = DateTime.Now.Date;
 
         // 1. Data Pencapaian (Hanya hari ini)
         var todaysWins = await _dbContext.ActivityLogs
@@ -57,7 +57,7 @@ public class ReflectionService
         var todaysWinsJson = JsonSerializer.Serialize(todaysWins);
         var pendingTasksJson = JsonSerializer.Serialize(pendingTasks);
         // 3. Susun prompt sintesis untuk AI
-        var prompt = AIprompt.PromptGetReflectionContextAsync(contextType, activeMemoriesJson, todaysWinsJson, pendingTasksJson, DateTime.UtcNow);
+        var prompt = AIprompt.PromptGetReflectionContextAsync(contextType, activeMemoriesJson, todaysWinsJson, pendingTasksJson, DateTime.Now);
         //Console.WriteLine(prompt);
         // 4. Eksekusi model LLM
         var jsonResult = await _aiService.ExecuteGeminiJsonApi(prompt, "ApiKeyAIMemoryCompiler", ct);
@@ -103,7 +103,7 @@ public class ReflectionService
                         }).ToListAsync();
         var memoryUserJson = JsonSerializer.Serialize(memoryUser);
 
-        string prompt = AIprompt.BuildReflectionCompilerPrompt(request.Transcript, presentedContextJson, memoryUserJson, DateTime.UtcNow);
+        string prompt = AIprompt.BuildReflectionCompilerPrompt(request.Transcript, presentedContextJson, memoryUserJson, DateTime.Now);
 
         // 2. Panggil API AI
         string aiResponseJson = await _aiService.ExecuteGeminiJsonApi(prompt, "ApiKeyAIMemoryCompiler", ct);
@@ -123,7 +123,7 @@ public class ReflectionService
             {
                 UserId = userId,
                 ContextType = request.ContextType,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.Now,
                 VoiceTranscript = request.Transcript,
                 AIFeedback = aiResult.FeedbackText,
                 ProcessedActionsJson = aiResponseJson
@@ -152,7 +152,7 @@ public class ReflectionService
                     if (activity != null)
                     {
                         activity.Status = "Completed";
-                        activity.CompletedAt = actAction.ActualCompletedDate ?? DateTime.UtcNow;
+                        activity.CompletedAt = actAction.ActualCompletedDate ?? DateTime.Now;
                         activity.ResolutionSource = "VoiceReflection";
                         activity.Note = actAction.Note ?? activity.Note;
                         touchedActivityIds.Add(activity.Id);
@@ -190,7 +190,8 @@ public class ReflectionService
                         IsReminder = actAction.NewScheduledTime.HasValue,
                         Status = actAction.NewStatus ?? "Pending",
                         ResolutionSource = "VoiceReflection",
-                        CreateAt = DateTime.UtcNow
+                        CreateAt = DateTime.Now,
+                        UpdatedAt = DateTime.Now
                     };
                     _dbContext.ActivityLogs.Add(newActivity);
                     await _dbContext.SaveChangesAsync(ct);
@@ -246,10 +247,10 @@ public class ReflectionService
                         EvidenceCount = 1,
                         Status = "Active",
                         Source = "VoiceReflection",
-                        FirstObservedAt = DateTime.UtcNow,
-                        LastObservedAt = DateTime.UtcNow,
-                        CreatedAt = DateTime.UtcNow,
-                        UpdatedAt = DateTime.UtcNow
+                        FirstObservedAt = DateTime.Now,
+                        LastObservedAt = DateTime.Now,
+                        CreatedAt = DateTime.Now,
+                        UpdatedAt = DateTime.Now
                     };
                     _dbContext.AIMemories.Add(memory);
                 }
@@ -258,8 +259,8 @@ public class ReflectionService
                     // Update memori yang sudah ada
                     memory.Confidence = Math.Min(1.0, memory.Confidence + 0.1);
                     memory.EvidenceCount += 1;
-                    memory.LastObservedAt = DateTime.UtcNow;
-                    memory.UpdatedAt = DateTime.UtcNow;
+                    memory.LastObservedAt = DateTime.Now;
+                    memory.UpdatedAt = DateTime.Now;
                 }
 
                 // Perbarui isi data JSON memori
@@ -292,8 +293,8 @@ public class ReflectionService
                         SourceType = "Activity",
                         SourceId = validActivitySourceId.Value,
                         ObservationValue = obsText,
-                        ObservedAt = DateTime.UtcNow,
-                        CreatedAt = DateTime.UtcNow,
+                        ObservedAt = DateTime.Now,
+                        CreatedAt = DateTime.Now,
                         Weight = 1.0
                     });
                 }
@@ -307,8 +308,8 @@ public class ReflectionService
                         SourceType = "VoiceReflection",
                         SourceId = reflectionLog.Id,
                         ObservationValue = obsText,
-                        ObservedAt = DateTime.UtcNow,
-                        CreatedAt = DateTime.UtcNow,
+                        ObservedAt = DateTime.Now,
+                        CreatedAt = DateTime.Now,
                         Weight = 0.8
                     });
                 }

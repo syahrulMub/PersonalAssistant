@@ -10,7 +10,7 @@ public class UserReflection
     public User User { get; set; }
     // Tipe refleksi bebas (misal: "Daily", "Weekly", "AdHocVoice", "Correction")
     public string ContextType { get; set; } = "Daily";
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
     public string? VoiceTranscript { get; set; }   // Teks hasil rekaman suara / input teks user
 
     // Output & Keputusan AI

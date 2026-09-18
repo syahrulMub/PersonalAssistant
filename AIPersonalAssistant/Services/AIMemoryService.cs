@@ -21,7 +21,7 @@ public class AIMemoryService : IAIMemoryService
     }
     public async Task ProcessDailyMemoriesAsync(int userId)
     {
-        var lookback = DateTime.UtcNow.AddDays(-1);
+        var lookback = DateTime.Now.AddDays(-1);
         var activitiesToProcess = await _dbContext.ActivityLogs
             .Where(a => a.UserId == userId &&
                 (
@@ -106,7 +106,7 @@ public class AIMemoryService : IAIMemoryService
 
         if (processedIds.Count > 0)
         {
-            var syncTime = DateTime.UtcNow;
+            var syncTime = DateTime.Now;
 
             await _dbContext.ActivityLogs
                 .Where(a => processedIds.Contains(a.Id))
@@ -120,7 +120,7 @@ public class AIMemoryService : IAIMemoryService
         using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
         try
         {
-            var now = DateTime.UtcNow;
+            var now = DateTime.Now;
 
             foreach (var item in decisions)
             {

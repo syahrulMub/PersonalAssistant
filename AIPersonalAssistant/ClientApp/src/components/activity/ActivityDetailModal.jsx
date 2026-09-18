@@ -118,7 +118,9 @@ export const ActivityDetailModal = ({
           isReminder:
             detailForm.isReminder !== undefined ? detailForm.isReminder : true,
           remindAt: detailForm.remindAt
-            ? new Date(detailForm.remindAt).toISOString()
+            ? detailForm.remindAt.length === 16
+              ? `${detailForm.remindAt}:00`
+              : detailForm.remindAt
             : null,
           note: detailForm.note ? detailForm.note.trim() : null,
         };

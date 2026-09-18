@@ -38,15 +38,22 @@ export const VoiceConfirmationModal = ({
   // Inisialisasi items saat modal dibuka atau items berubah
   useEffect(() => {
     if (items && items.length > 0) {
-      const initialized = items.map((item, index) => ({
-        id: index + 1,
-        title: item.title || "",
-        description: item.description || "",
-        category: item.category || "General",
-        isReminder:
-          item.isReminder !== undefined ? Boolean(item.isReminder) : true,
-        remindAt: toInputDatetimeString(item.remindAt),
-      }));
+      const initialized = items.map((item, index) => {
+        const formattedRemindAt = toInputDatetimeString(item.remindAt);
+        const hasTime = Boolean(formattedRemindAt);
+        return {
+          id: index + 1,
+          title: item.title || "",
+          description: item.description || "",
+          category: item.category || "General",
+          isReminder: hasTime
+            ? item.isReminder !== undefined
+              ? Boolean(item.isReminder)
+              : true
+            : false,
+          remindAt: formattedRemindAt,
+        };
+      });
       setEditableItems(initialized);
     } else {
       setEditableItems([]);
@@ -57,10 +64,15 @@ export const VoiceConfirmationModal = ({
   const handleItemChange = (index, field, value) => {
     setEditableItems((prev) => {
       const updated = [...prev];
-      updated[index] = {
-        ...updated[index],
-        [field]: value,
-      };
+      const item = { ...updated[index], [field]: value };
+      if (field === "remindAt") {
+        if (!value) {
+          item.isReminder = false;
+        } else if (!item.isReminder) {
+          item.isReminder = true;
+        }
+      }
+      updated[index] = item;
       return updated;
     });
   };
@@ -77,7 +89,7 @@ export const VoiceConfirmationModal = ({
         title: "",
         description: "",
         category: "General",
-        isReminder: true,
+        isReminder: false,
         remindAt: "",
       },
     ]);
@@ -101,13 +113,20 @@ export const VoiceConfirmationModal = ({
     }
 
     // Format payload
-    const payload = editableItems.map((item) => ({
-      title: item.title.trim(),
-      description: item.description?.trim() || "",
-      category: item.category || "General",
-      isReminder: Boolean(item.isReminder),
-      remindAt: item.remindAt ? new Date(item.remindAt).toISOString() : null,
-    }));
+    const payload = editableItems.map((item) => {
+      const hasSchedule = Boolean(item.remindAt);
+      return {
+        title: item.title.trim(),
+        description: item.description?.trim() || "",
+        category: item.category || "General",
+        isReminder: hasSchedule ? Boolean(item.isReminder) : false,
+        remindAt: hasSchedule
+          ? item.remindAt.length === 16
+            ? `${item.remindAt}:00`
+            : item.remindAt
+          : null,
+      };
+    });
 
     onSaveBatch(payload);
   };
@@ -174,15 +193,21 @@ export const VoiceConfirmationModal = ({
                 key={item.id || index}
                 className="p-4 sm:p-5 rounded-2xl bg-white dark:!bg-deep-850 border border-slate-200 dark:!border-slate-800 shadow-sm space-y-3 relative group"
               >
-                {/* Header Kartu: Nomor & Tombol Hapus */}
+                {/* Header Kartu: Nomor & Status Mode & Tombol Hapus */}
                 <div className="flex items-center justify-between gap-2 border-b border-slate-100 dark:!border-slate-800 pb-2.5">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="w-6 h-6 rounded-full bg-ai-violet-100 dark:!bg-ai-violet-950/80 text-ai-violet-700 dark:!text-ai-violet-300 font-mono font-bold text-xs flex items-center justify-center">
                       #{index + 1}
                     </span>
-                    <span className="text-xs font-semibold text-slate-700 dark:!text-slate-300">
-                      Rencana Kegiatan
-                    </span>
+                    {item.remindAt ? (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 dark:!bg-amber-950/60 text-amber-600 dark:!text-amber-400 border border-amber-200 dark:!border-amber-800/60 flex items-center gap-1">
+                        <span>⏰</span> Jadwal Pengingat
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 dark:!bg-emerald-950/60 text-emerald-600 dark:!text-emerald-400 border border-emerald-200 dark:!border-emerald-800/60 flex items-center gap-1">
+                        <span>🏆</span> Catatan Pencapaian
+                      </span>
+                    )}
                   </div>
 
                   <button
@@ -236,9 +261,14 @@ export const VoiceConfirmationModal = ({
                   {/* Waktu Jadwal / Pengingat */}
                   <div>
                     <label className="block text-[11px] font-semibold text-slate-600 dark:!text-slate-400 mb-1">
-                      <span className="flex items-center gap-1">
-                        <BsClock className="text-ai-violet-500" />
-                        <span>Waktu / Jadwal Pengingat</span>
+                      <span className="flex items-center justify-between">
+                        <span className="flex items-center gap-1">
+                          <BsClock className="text-ai-violet-500" />
+                          <span>Waktu Pengingat</span>
+                        </span>
+                        <span className="text-[10px] font-normal text-slate-400">
+                          (Opsional)
+                        </span>
                       </span>
                     </label>
                     <input
@@ -253,14 +283,32 @@ export const VoiceConfirmationModal = ({
                 </div>
 
                 {/* Baris 3: Toggle Notifikasi Pengingat */}
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50/80 dark:!bg-deep-900/60 border border-slate-200/60 dark:!border-slate-800">
-                  <div className="text-[11px] text-slate-600 dark:!text-slate-300">
-                    Kirim pengingat email otomatis untuk agenda ini
+                <div
+                  className={`flex items-center justify-between p-2.5 rounded-xl border transition-colors ${
+                    !item.remindAt
+                      ? "bg-slate-50/40 dark:!bg-deep-900/30 border-slate-100 dark:!border-slate-800/40 opacity-60"
+                      : "bg-slate-50/80 dark:!bg-deep-900/60 border-slate-200/60 dark:!border-slate-800"
+                  }`}
+                >
+                  <div>
+                    <div className="text-[11px] font-medium text-slate-700 dark:!text-slate-200">
+                      Kirim pengingat email otomatis
+                    </div>
+                    {!item.remindAt && (
+                      <div className="text-[10px] text-slate-400">
+                        Aktif hanya jika waktu pengingat diisi
+                      </div>
+                    )}
                   </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
+                  <label
+                    className={`relative inline-flex items-center ${
+                      !item.remindAt ? "cursor-not-allowed" : "cursor-pointer"
+                    }`}
+                  >
                     <input
                       type="checkbox"
-                      checked={item.isReminder}
+                      disabled={!item.remindAt}
+                      checked={item.remindAt ? item.isReminder : false}
                       onChange={(e) =>
                         handleItemChange(index, "isReminder", e.target.checked)
                       }

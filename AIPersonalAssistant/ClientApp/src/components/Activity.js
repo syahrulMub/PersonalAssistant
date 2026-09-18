@@ -359,7 +359,11 @@ export function Activity() {
       setVoiceBatchItems([]);
       setOriginalVoiceText("");
       showToast(data.message || "Aktivitas berhasil disimpan!", "success");
-      fetchActivities(1, pageSize, activeTab);
+      if (page === 1) {
+        fetchActivities(1, pageSize, activeTab);
+      } else {
+        setPage(1);
+      }
     } catch (err) {
       console.error("Batch save error:", err);
       showToast(

@@ -31,7 +31,7 @@ public class SchedulerMethod
 
     public async Task GenerateNightSummaryAsync()
     {
-        var targetDate = DateTime.UtcNow.Date;
+        var targetDate = DateTime.Now.Date;
         var startOfToday = targetDate;
         var endOfToday = startOfToday.AddDays(1).AddTicks(-1);
         var threeDaysAgo = startOfToday.AddDays(-2); // Jendela 3 hari (kemarin lusa s/d hari ini)
@@ -118,7 +118,7 @@ FORMAT OUTPUT (Wajib JSON valid murni tanpa markdown):
     }
     public async Task GenerateMorningSummaryAsync()
     {
-        var treedayago = DateTime.UtcNow.AddDays(-1);
+        var treedayago = DateTime.Now.AddDays(-1);
         var listUser = await _dbContext.Users.ToListAsync();
         foreach (var user in listUser)
         {

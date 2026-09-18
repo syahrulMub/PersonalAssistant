@@ -89,7 +89,7 @@ public class AIFeatureController : ControllerBase
                     UserId = userId,
                     FeatureId = request.FeatureId,
                     IsEnabled = request.IsEnabled,
-                    UpdatedAt = DateTime.UtcNow
+                    UpdatedAt = DateTime.Now
                 };
                 _dbContext.UserAIFeatures.Add(userFeature);
             }
@@ -97,7 +97,7 @@ public class AIFeatureController : ControllerBase
             {
                 // Mapping sudah ada -> Perbarui status (Update)
                 userFeature.IsEnabled = request.IsEnabled;
-                userFeature.UpdatedAt = DateTime.UtcNow;
+                userFeature.UpdatedAt = DateTime.Now;
             }
 
             await _dbContext.SaveChangesAsync();

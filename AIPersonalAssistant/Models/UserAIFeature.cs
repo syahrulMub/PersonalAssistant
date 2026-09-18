@@ -10,5 +10,5 @@ public class UserAIFeature
 
     // Status on/off per user
     public bool IsEnabled { get; set; } = false;
-    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.Now;
 }

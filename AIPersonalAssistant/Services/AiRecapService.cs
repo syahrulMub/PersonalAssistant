@@ -18,11 +18,11 @@ public class AiRecapService
 
         var recap = new AIRecap
         {
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.Now,
             SummaryText = dailySummaryAiDto.SummaryText,
             PositiveAffirmations = dailySummaryAiDto.PositiveAffirmations,
             ActionableInsights = dailySummaryAiDto.ActionableInsights,
-            EmailSendAt = DateTime.UtcNow.AddHours(1),
+            EmailSendAt = DateTime.Now.AddHours(1),
             IsEmailSent = false
         };
 

@@ -20,7 +20,7 @@ public class ApiLogController : ControllerBase
     public IActionResult GetLogs([FromQuery] string? date = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 100)
     {
         var selectedDate = string.IsNullOrWhiteSpace(date)
-            ? DateTime.UtcNow.ToString("yyyy-MM-dd")
+            ? DateTime.Now.ToString("yyyy-MM-dd")
             : date;
 
         var logs = _apiLogService.ReadLogs(page, pageSize, selectedDate);
