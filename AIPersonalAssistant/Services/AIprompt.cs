@@ -74,6 +74,7 @@ public static class AIprompt
         - Evaluasi apakah input memuat beberapa agenda terpisah, serangkaian tugas berurutan, atau pembagian jadwal beberapa hari.
         - Jika terdapat lebih dari satu entitas kegiatan, pecah secara modular menjadi objek terpisah dalam array JSON.
         - Jika hanya memuat satu konteks kegiatan, hasilkan array dengan satu objek.
+        - Batasi pemrosesan maksimal 15 entitas kegiatan per prompt; prioritaskan urutan waktu terdekat dan abaikan agenda tambahan di luar batas tersebut.
 
         2. Konstruksi Judul ('title'):
         - Berupa frasa tindakan langsung yang padat dan jelas.
@@ -240,6 +241,7 @@ public static class AIprompt
                 - Jika pengguna ragu/tidak menyebut tanggal pasti (misal: "tunda dulu", "belum sempat", "nanti aja"): Otomatis jadwalkan ke esok hari (H+1) dari waktu saat ini, gunakan jam yang sama dengan jadwal sebelumnya atau default pukul 09:00 UTC.
             - 'Cancel': Membatalkan rencana yang dinyatakan tidak jadi dikerjakan.
             - 'CreateNew': HANYA digunakan jika pengguna secara eksplisit menyebutkan rencana/agenda terpisah yang benar-benar baru untuk dikerjakan di masa depan.
+                - Batasi pemrosesan maksimal 15 entitas kegiatan per prompt; prioritaskan urutan waktu terdekat dan abaikan agenda tambahan di luar batas tersebut.
                 'newScheduledTime' : Terjemahkan waktu lokal pengguna ke format ISO 8601 UTC ('YYYY-MM-DDTHH:mm:ssZ')
                 'newTaskCategory': Pilih SATU kategori yang paling tepat dari daftar berikut:
                 - 'Productivity' (pekerjaan, tugas kantor, meeting, deadline)
