@@ -61,26 +61,19 @@ public class ApiLogService
         return sanitized;
     }
 
-    private async Task WriteLog(string level, string message, string? controller = null, string? action = null, string? clientIp = null, string? details = null)
+    private void WriteLog(string level, string message, string? controller = null, string? action = null, string? clientIp = null, string? details = null)
     {
+        var entry = new LogEntry(
+            Timestamp: DateTimeOffset.Now,
+            Level: level,
+            Message: message,
+            Controller: controller,
+            Action: action,
+            ClientIp: clientIp,
+            Details: details
+        );
 
-        await foreach (var log in _logQueue.ReadAllAsync())
-        {
-            var date = log.Timestamp.ToString("yyyy-MM-dd");
-            var logFilePath = Path.Combine(_logsDirectory, $"api-{date}.log");
-
-            // Format baris log persis seperti milikmu
-            var logLine = $" {DateTimeOffset.Now.ToString("HH:mm:ss - DD MMM yyyy")} | {level} | {controller ?? "-"} | {action ?? "-"} | {clientIp ?? "-"} | {message} | {log.Details ?? string.Empty}";
-
-            try
-            {
-                await File.AppendAllTextAsync(logFilePath, logLine + Environment.NewLine);
-            }
-            catch
-            {
-                // Mencegah background worker berhenti kalau ada interupsi sesaat
-            }
-        }
+        _logQueue.QueueLog(entry);
     }
 
     public int GetLogCount(string? date = null)

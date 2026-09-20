@@ -1,5 +1,7 @@
 using System.Threading.Channels;
 
+namespace AIPersonalAssistant.Services;
+
 public interface ILogQueue
 {
     void QueueLog(LogEntry log);
@@ -8,7 +10,7 @@ public interface ILogQueue
 
 public class LogQueue : ILogQueue
 {
-    // Channel bounded untuk mencegah RAM bocor jika disk macet
+    // Channel bounded untuk mencegah memory bloat jika disk macet
     private readonly Channel<LogEntry> _channel = Channel.CreateBounded<LogEntry>(new BoundedChannelOptions(10000)
     {
         FullMode = BoundedChannelFullMode.DropOldest // Jika antrean penuh, buang log tertua
@@ -20,4 +22,12 @@ public class LogQueue : ILogQueue
         => _channel.Reader.ReadAllAsync(cancellationToken);
 }
 
-public record LogEntry(string Level, string Message, string Details, DateTime Timestamp);
+public record LogEntry(
+    DateTimeOffset Timestamp,
+    string Level,
+    string Message,
+    string? Controller = null,
+    string? Action = null,
+    string? ClientIp = null,
+    string? Details = null
+);
