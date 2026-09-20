@@ -12,6 +12,7 @@ import { ActivityCard } from "./activity/ActivityCard";
 import { ActivityDetailModal } from "./activity/ActivityDetailModal";
 import { QuickVoiceModal } from "./activity/QuickVoiceModal";
 import { VoiceConfirmationModal } from "./activity/VoiceConfirmationModal";
+import { AchievementFilterBar } from "./activity/AchievementFilterBar";
 
 export function Activity() {
   const [activities, setActivities] = useState([]);
@@ -50,6 +51,25 @@ export function Activity() {
   const [originalVoiceText, setOriginalVoiceText] = useState("");
   const [isVoiceProcessing, setIsVoiceProcessing] = useState(false);
 
+  // State Filter Pencapaian
+  const [achievementSearch, setAchievementSearch] = useState("");
+  const [achievementCategory, setAchievementCategory] = useState("all");
+  const [achievementDate, setAchievementDate] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  const isAchievementFiltered =
+    Boolean(achievementSearch.trim()) ||
+    achievementCategory !== "all" ||
+    Boolean(achievementDate);
+
+  // Debounce search query untuk efisiensi fetch
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(achievementSearch);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [achievementSearch]);
+
   const showToast = (message, type = "success") => {
     setToast({
       isOpen: true,
@@ -58,11 +78,14 @@ export function Activity() {
     });
   };
 
-  // Mengambil data dari backend berdasarkan tab yang aktif
+  // Mengambil data dari backend berdasarkan tab yang aktif & filter pencapaian
   const fetchActivities = async (
     currentPage = page,
     currentPageSize = pageSize,
     currentTab = activeTab,
+    search = debouncedSearch,
+    category = achievementCategory,
+    date = achievementDate,
   ) => {
     try {
       setLoading(true);
@@ -77,6 +100,15 @@ export function Activity() {
         url += `&timeline=overdue`;
       } else if (currentTab === "completed") {
         url += `&status=Completed`;
+        if (search && search.trim()) {
+          url += `&search=${encodeURIComponent(search.trim())}`;
+        }
+        if (category && category !== "all") {
+          url += `&category=${encodeURIComponent(category)}`;
+        }
+        if (date) {
+          url += `&date=${encodeURIComponent(date)}`;
+        }
       }
 
       const response = await fetch(url, {
@@ -118,15 +150,52 @@ export function Activity() {
     }
   };
 
-  // Re-fetch saat page, pageSize, atau activeTab berubah
+  // Re-fetch saat page, pageSize, activeTab, atau filter pencapaian berubah
   useEffect(() => {
-    fetchActivities(page, pageSize, activeTab);
-  }, [page, pageSize, activeTab]);
+    fetchActivities(
+      page,
+      pageSize,
+      activeTab,
+      debouncedSearch,
+      achievementCategory,
+      achievementDate,
+    );
+  }, [
+    page,
+    pageSize,
+    activeTab,
+    debouncedSearch,
+    achievementCategory,
+    achievementDate,
+  ]);
 
   // Handler Ganti Tab Filter
   const handleTabChange = (newTab) => {
     if (activeTab === newTab) return;
     setActiveTab(newTab);
+    setPage(1);
+  };
+
+  // Handlers Filter Pencapaian
+  const handleResetAchievementFilter = () => {
+    setAchievementSearch("");
+    setAchievementCategory("all");
+    setAchievementDate("");
+    setPage(1);
+  };
+
+  const handleSearchChange = (val) => {
+    setAchievementSearch(val);
+    setPage(1);
+  };
+
+  const handleCategoryChange = (val) => {
+    setAchievementCategory(val);
+    setPage(1);
+  };
+
+  const handleDateChange = (val) => {
+    setAchievementDate(val);
     setPage(1);
   };
 
@@ -387,7 +456,14 @@ export function Activity() {
     );
 
     if (page === 1) {
-      fetchActivities(1, pageSize, activeTab);
+      fetchActivities(
+        1,
+        pageSize,
+        activeTab,
+        debouncedSearch,
+        achievementCategory,
+        achievementDate,
+      );
     } else {
       setPage(1);
     }
@@ -413,7 +489,16 @@ export function Activity() {
           setOriginalVoiceText("");
           setIsModalOpen(true);
         }}
-        onRefresh={() => fetchActivities(page, pageSize, activeTab)}
+        onRefresh={() =>
+          fetchActivities(
+            page,
+            pageSize,
+            activeTab,
+            debouncedSearch,
+            achievementCategory,
+            achievementDate,
+          )
+        }
       />
 
       {/* Banner status pemrosesan suara oleh Gemini AI */}
@@ -435,6 +520,21 @@ export function Activity() {
         overdueCount={overdueCount}
       />
 
+      {/* 2.5. Filter Bar Khusus Tab Pencapaian (Tracking Progres) */}
+      {activeTab === "completed" && (
+        <AchievementFilterBar
+          searchQuery={achievementSearch}
+          onSearchChange={handleSearchChange}
+          selectedCategory={achievementCategory}
+          onCategoryChange={handleCategoryChange}
+          selectedDate={achievementDate}
+          onDateChange={handleDateChange}
+          onReset={handleResetAchievementFilter}
+          totalCount={totalCount}
+          isFiltered={isAchievementFiltered}
+        />
+      )}
+
       {/* 3. Daftar Kartu Kegiatan */}
       <section className="min-h-[220px]">
         {loading ? (
@@ -447,6 +547,8 @@ export function Activity() {
         ) : activities.length === 0 ? (
           <EmptyState
             activeTab={activeTab}
+            isFiltered={activeTab === "completed" && isAchievementFiltered}
+            onResetFilter={handleResetAchievementFilter}
             onAddActivity={() => {
               setVoiceInitialData(null);
               setOriginalVoiceText("");

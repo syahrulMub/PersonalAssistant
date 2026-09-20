@@ -2,27 +2,54 @@ namespace AIPersonalAssistant.Services;
 
 public static class AIprompt
 {
-    public static string BuildExtractionPrompt(string rawActivitiesJson, string existingTopicsCatalog) =>
-        $@"Anda adalah AI Memory Extraction Engine. Tugas Anda mengekstrak wawasan bernilai jangka panjang dari log aktivitas pengguna ke dalam struktur data memori yang kohesif.
+    public static string BuildExtractionPrompt(string rawActivitiesJson, string realTopicsCatalog, string? seedCatalog = null)
+    {
+        // Blok panduan & data seed hanya muncul saat fase cold start / belum mature
+        string seedSection = string.IsNullOrWhiteSpace(seedCatalog)
+            ? ""
+            : $@"[SEED MEMORY: ACUAN STANDAR LEVELING & KEDALAMAN ATRIBUT]
+        Alasan data ini disertakan adalah sebagai **patokan kedalaman ekstraksi (leveling benchmark)** agar Anda mengekstrak atribut secara kaya (target 20-40 atribut) dan memahami batas skala entitas. 
+        DILARANG menautkan aktivitas pengguna ke entitas Seed Memory ini; gunakan murni sebagai standar mutu pemodelan:
+        {seedCatalog}
+        ";
 
-        [DAFTAR TOPIK / MEMORI YANG SUDAH AKTIF]
-        {existingTopicsCatalog}
+        return $@"Anda adalah AI Memory Extraction Engine. Tugas Anda mengekstrak wawasan bernilai jangka panjang dari log aktivitas pengguna ke dalam struktur data memori yang kohesif.
+
+        [DAFTAR TOPIK / MEMORI AKTIF PENGGUNA]
+        {realTopicsCatalog}
+
+        {seedSection}PANDUAN MEMORI AKTIF:
+        - Entitas di atas adalah memori faktual milik pengguna yang sudah tercatat. Jika aktivitas baru berkaitan dengan entitas tersebut, WAJIB gunakan `subject` dan `key` yang persis sama untuk konsolidasi data.
+
+        MANDAT EKSTRAKSI MENYELURUH & CAKUPAN MULTI-DOMAIN:
+        - Pindai seluruh baris log aktivitas secara menyeluruh. Dilarang hanya mengambil satu atau dua aktivitas dengan narasi terpanjang/dominan.
+        - Keseimbangan Domain: Berikan bobot yang sama untuk seluruh spektrum kegiatan (inisiatif karya, kebiasaan fisik/kebugaran, kewajiban berkala/spiritual, pemeliharaan aset fisik, peran sosial/keluarga, dan proses administratif/finansial).
+        - Dilarang membuang log personal atau komitmen rutin hanya karena kalimatnya singkat. Jika mencerminkan komitmen, kebiasaan, atau relasi, WAJIB diekstrak sebagai entitas mandiri di dalam array `memories`.
+
+        KORELASI ENTITAS & DETEKSI RITME (MULTI-LOG LINKING):
+        - Korelasi Entitas Silang: Jika beberapa log merujuk pada kolaborator, lokasi kerja, atau topik kegiatan yang saling melengkapi di rentang waktu berbeda, satukan konteks tersebut ke dalam SATU entitas topik yang utuh dan berkesinambungan.
+        - Kalkulasi Frekuensi: Analisis rentang tanggal eksekusi. Jika suatu kegiatan berulang beberapa kali dalam rentang waktu yang diamati, hitung frekuensinya dan petakan ke properti `cycleInterval`, serta proyeksikan tanggal berikutnya pada `nextProjectedAt`.
 
         PRINSIP EVALUASI NILAI MEMORI:
-        Ekstrak menjadi entitas memori jika aktivitas memenuhi salah satu kriteria nilai berikut:
-        1. **Siklus Periodik & Mitigasi Risiko (Periodic Cycles & Preservation)**:
-        - Tindakan berkala yang memiliki interval waktu berulang dan berisiko menimbulkan dampak negatif jika terlupakan (pemeliharaan kondisi, siklus kepatuhan, atau peninjauan preventif).
-        2. **Kondisi & Profil Berkelanjutan (Sustained State & Context)**:
-        - Informasi mengenai peran primer, transisi fase hidup, atau status fungsional yang memengaruhi lanskap keseharian pengguna.
-        3. **Inisiatif & Milestone Bertahap (Progressive Initiatives)**:
-        - Upaya yang membutuhkan rangkaian proses bertingkat dan waktu berkelanjutan untuk mencapai target tertentu.
-        4. **Rutinitas & Kesejahteraan Berulang (Behavioral Routines & Wellness)**:
-        - Pola aktivitas fisik, mental, atau kebiasaan terstruktur yang mencerminkan keterlibatan berkala.
+        1. **Inisiatif & Milestone Bertahap (Progressive Initiatives)**:
+        - Upaya kerja, eksplorasi bertahap, atau target berkesinambungan yang memiliki pencapaian progresif.
+        2. **Rutinitas, Kesejahteraan & Keterampilan (Behavioral, Skills & Routines)**:
+        - Keterlibatan fisik, pengasahan keterampilan, atau kebiasaan terstruktur yang mencerminkan ritme hidup.
+        3. **Siklus Periodik & Mitigasi Risiko (Periodic Cycles & Preservation)**:
+        - Pemeliharaan kondisi/aset, pemenuhan kewajiban terjadwal, atau tindakan berkala yang berisiko jika diabaikan.
+        4. **Kondisi & Status Berkelanjutan (Sustained State & Context)**:
+        - Peran relasional/fungsional, komitmen personal bermakna, pemantauan administratif, atau status kapasitas saat ini.
         5. **Preferensi & Batasan Operasional (Preferences & Constraints)**:
-        - Kecenderungan pilihan instrumen, metodologi kerja, atau batasan personal yang konsisten.
+        - Pilihan instrumen, metodologi kerja, konfigurasi operasional, atau batasan personal yang konsisten.
 
-        PENGECUALIAN / ABAIKAN (TRANSIENT NOISE):
-        - Abaikan transaksi atau interaksi kasual sekali lewat yang tidak membawa dampak risiko jangka panjang jika dilupakan, serta tidak memiliki keterkaitan dengan inisiatif, status, atau kebiasaan terstruktur.
+        TATA KELOLA ATRIBUT DINAMIS (ATTRIBUTES GOVERNANCE):
+        - Objek `attributes` berfungsi menyimpan parameter intrinsik dan konteks faktual spesifik domain secara dinamis.
+        - Gunakan format camelCase yang deskriptif untuk penamaan kunci.
+        - Tipe data yang diizinkan HANYA: String, Number, Boolean, atau Array of String (format datar/flat, tanpa nested object).
+        - Ortogonalitas Kunci: Dilarang membuat kunci atribut yang menduplikasi field operasional root (`currentStatus`, `details`, `lastExecutedAt`, `nextProjectedAt`, `cycleInterval`).
+        - Non-Redundansi: Jangan membuat beberapa kunci sinonim untuk menampung data semantik yang identik.
+        - Persistensi Fakta: Simpan parameter stabil (identitas pihak terkait, spesifikasi instrumen/alat, preferensi terukur). Seluruh narasi kronologis disatukan ke dalam `details`.
+        - Batas Densitas: Pertahankan 8-15 pasangan atribut paling bernilai per topik.
 
         ATURAN STATUS & DERAJAT KEYAKINAN (CONFIDENCE):
         - **Aktivitas Faktual (Telah Terjadi)**: Berikan confidence tinggi (0.8 - 1.0) dan tentukan status operasional 'Completed' atau 'Ongoing'.
@@ -37,13 +64,7 @@ public static class AIprompt
             ""memoryType"": ""Cyclic"" | ""State"" | ""Project"" | ""Routine"" | ""Preference"",
             ""subject"": ""string (Domain/Area Utama)"",
             ""key"": ""string (Kunci Topik Spesifik)"",
-            ""value"": {{
-                ""currentStatus"": ""Completed"" | ""Ongoing"" | ""Planned"" | ""Scheduled"",
-                ""details"": ""string ringkasan fakta/progres"",
-                ""lastExecutedAt"": ""YYYY-MM-DD (jika faktual telah terjadi)"",
-                ""nextProjectedAt"": ""YYYY-MM-DD (jika terdapat rencana/estimasi jadwal berikutnya)"",
-                ""cycleInterval"": ""string estimasi ritme jika relevan (misal: harian, mingguan, bulanan, kuartalan)""
-            }},
+            ""value"": ""{{\""currentStatus\"":\""Completed|Ongoing|Planned|Scheduled\"",\""details\"":\""ringkasan padat fakta\"",\""lastExecutedAt\"":\""YYYY-MM-DD atau null\"",\""attributes\"":{{\""sampleKey\"":\""val\"",\""sampleList\"":[\""item1\"",\""item2\""]}}}}"",
             ""source"": ""InferredFromActivity"",
             ""confidence"": 0.0,
             ""evidence"": [
@@ -59,7 +80,7 @@ public static class AIprompt
 
         [LOG AKTIVITAS PENGGUNA]
         {rawActivitiesJson}";
-
+    }
     public static string PromptParseActivityFromSpeechAsync(string currentTimeString, string dayOfWeek, string speechText) =>
     $@"
         Peran: Ekstraktor data aktivitas terstruktur dari transkrip ucapan.
@@ -113,23 +134,26 @@ public static class AIprompt
         ";
     public static string BuildConsolidationPrompt(string candidatesJson, string existingMemoriesJson) =>
         $@"Anda adalah AI Memory Consolidation Engine. Tugas Anda mengevaluasi kandidat memori baru terhadap memori lama pengguna untuk mencegah fragmentasi dan duplikasi data.
+            [KANDIDAT MEMORI BARU DARI AKTIVITAS HARI INI]
+            {candidatesJson}
 
             ATURAN PENGAMBILAN KEPUTUSAN (ACTION):
             1. CREATE:
             - Gunakan jika kandidat benar-benar topik baru dan TIDAK memiliki kaitan dengan memori lama.
             - Set ""existingMemoryId"": null, ""sourceMemoryId"": null.
+            - Jika ada beberapa kandidat baru yang saling berkaitan di dalam [KANDIDAT MEMORI BARU DARI AKTIVITAS HARI INI], satukan menjadi 1 keputusan CREATE tunggal.
 
             2. UPDATE:
             - Gunakan jika kandidat merupakan kelanjutan, perkembangan progres, atau informasi tambahan dari memori lama yang sudah ada.
             - Set ""existingMemoryId"" ke ID memori lama.
-            - Gabungkan data lama dan data baru di dalam ""valueJson"" (jangan hapus data lama yang masih valid, sintesiskan).
+            - Lakukan Deep Merge pada ""valueJson"": pertahankan atribut lama yang masih valid, perbarui status/tanggal, dan tambahkan atribut baru.
             - Naikkan nilai ""confidence"" (maksimal 1.0) karena bukti observasi bertambah.
 
             3. MERGE:
             - Gunakan jika kandidat menyadarkan bahwa ada memori lama A (sub-fitur/topik parsial) yang sebenarnya adalah bagian dari memori lama B (proyek utama).
             - Set ""existingMemoryId"" ke ID memori target utama (B).
             - Set ""sourceMemoryId"" ke ID memori lama yang akan dilebur/diarsipkan (A).
-            - Gabungkan seluruh konten ke dalam ""valueJson"" memori utama.
+            - Gabungkan seluruh wawasan kedua memori ke dalam objek ""valueJson""
 
             4. IGNORE:
             - Gunakan jika informasi pada kandidat sudah tercatat lengkap di memori lama tanpa ada hal baru yang bernilai.
@@ -144,7 +168,7 @@ public static class AIprompt
                 ""memoryType"": ""string"",
                 ""subject"": ""string"",
                 ""key"": ""string"",
-                ""valueJson"": ""string (JSON valid yang sudah di-serialize/escaped)"",
+                ""valueJson"": ""string (JSON valid yang sudah di-serialize/escaped sesuai format pada KANDIDAT MEMORI BARU DARI AKTIVITAS HARI INI) penambahan atau update atribut disini"",
                 ""confidence"": 0.0,
                 ""reason"": ""string ringkas alasan keputusan"",
                 ""evidence"": [
@@ -158,10 +182,7 @@ public static class AIprompt
             ]
 
             [DAFTAR MEMORI LAMA YANG RELEVAN]
-            {existingMemoriesJson}
-
-            [KANDIDAT MEMORI BARU DARI AKTIVITAS HARI INI]
-            {candidatesJson}";
+            {existingMemoriesJson}";
     public static string PromptGetReflectionContextAsync(string contextType, string activeMemoriesJson, string todaysWinsJson, string pendingTasksJson, DateTime currentTimestampUtc) =>
     $@"
         Anda adalah AI Context Synthesizer untuk sesi {contextType} Reflection pengguna.

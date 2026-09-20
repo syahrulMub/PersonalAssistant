@@ -12,8 +12,16 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using System.Security.Claims;
 using AIPersonalAssistant.Services.Interface;
+using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear(); // Terima forward header dari jaringan internal Docker
+});
 
 // Add services to the container.
 
@@ -88,6 +96,7 @@ builder.Services.AddHangfireServer();
 builder.Services.AddScoped<AiRecapService>();
 builder.Services.AddScoped<SchedulerMethod>();
 builder.Services.AddScoped<IAIMemoryService, AIMemoryService>();
+builder.Services.AddSingleton<ILogQueue, LogQueue>();
 
 //login
 builder.Services.AddScoped<ITokenService, TokenService>();
@@ -131,6 +140,8 @@ builder.Services.AddCors(options =>
 builder.Services.AddControllersWithViews();
 
 var app = builder.Build();
+
+app.UseForwardedHeaders();
 
 //auto migrate when deploy
 var baseDir = AppContext.BaseDirectory;

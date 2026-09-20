@@ -38,12 +38,16 @@ public class ActivityController : ControllerBase
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 10,
         [FromQuery] string? status = null,
-        [FromQuery] string? timeline = null)
+        [FromQuery] string? timeline = null,
+        [FromQuery] string? category = null,
+        [FromQuery] string? date = null,
+        [FromQuery] string? search = null)
     {
         try
         {
             int userId = User.GetUserId();
-            _logger.LogInformation("ActivityController.GetActivities called. page={Page}, pageSize={PageSize}, status={Status}, timeline={Timeline}", page, pageSize, status, timeline);
+            _logger.LogInformation("ActivityController.GetActivities called. page={Page}, pageSize={PageSize}, status={Status}, timeline={Timeline}, category={Category}, date={Date}, search={Search}",
+                page, pageSize, status, timeline, category, date, search);
 
             if (page < 1) page = 1;
             if (pageSize < 1) pageSize = 10;
@@ -86,6 +90,39 @@ public class ActivityController : ControllerBase
             else if (!string.IsNullOrWhiteSpace(status))
             {
                 query = query.Where(x => x.Status == status);
+            }
+
+            // Filter Kategori
+            if (!string.IsNullOrWhiteSpace(category) && !category.Equals("all", StringComparison.OrdinalIgnoreCase))
+            {
+                var categoryLower = category.Trim().ToLower();
+                query = query.Where(x => x.Category.ToLower() == categoryLower);
+            }
+
+            // Filter Tanggal (format: YYYY-MM-DD)
+            if (!string.IsNullOrWhiteSpace(date) && DateTime.TryParse(date, out var parsedDate))
+            {
+                var startOfDay = parsedDate.Date;
+                var endOfDay = startOfDay.AddDays(1).AddTicks(-1);
+
+                if (status?.Equals("Completed", StringComparison.OrdinalIgnoreCase) == true || timeline?.Equals("completed", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    query = query.Where(x => (x.CompletedAt ?? x.CreateAt) >= startOfDay && (x.CompletedAt ?? x.CreateAt) <= endOfDay);
+                }
+                else
+                {
+                    query = query.Where(x => ((x.ReminderTime ?? x.CreateAt) >= startOfDay && (x.ReminderTime ?? x.CreateAt) <= endOfDay));
+                }
+            }
+
+            // Filter Teks Pencarian (mencakup Judul, Deskripsi, dan Kategori)
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var s = search.Trim();
+                query = query.Where(x =>
+                    EF.Functions.Like(x.Title, $"%{s}%") ||
+                    (x.Description != null && EF.Functions.Like(x.Description, $"%{s}%")) ||
+                    (x.Category != null && EF.Functions.Like(x.Category, $"%{s}%")));
             }
 
             var totalCount = await query.CountAsync();

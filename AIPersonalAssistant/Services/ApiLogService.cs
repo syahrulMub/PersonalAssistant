@@ -1,15 +1,18 @@
 using Microsoft.AspNetCore.Hosting;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace AIPersonalAssistant.Services;
 
 public class ApiLogService
 {
+    private readonly ILogQueue _logQueue;
     private readonly string _logsDirectory;
 
-    public ApiLogService(IWebHostEnvironment env)
+    public ApiLogService(IWebHostEnvironment env, ILogQueue logQueue)
     {
         _logsDirectory = Path.Combine(env.ContentRootPath, "Logs");
+        _logQueue = logQueue;
         Directory.CreateDirectory(_logsDirectory);
     }
 
@@ -58,13 +61,26 @@ public class ApiLogService
         return sanitized;
     }
 
-    private void WriteLog(string level, string message, string? controller = null, string? action = null, string? clientIp = null, string? details = null)
+    private async Task WriteLog(string level, string message, string? controller = null, string? action = null, string? clientIp = null, string? details = null)
     {
-        var date = DateTime.Now.ToString("yyyy-MM-dd");
-        var logFilePath = Path.Combine(_logsDirectory, $"api-{date}.log");
-        var logLine = $"{DateTimeOffset.Now:O} | {level} | {controller ?? "-"} | {action ?? "-"} | {clientIp ?? "-"} | {message} | {details ?? string.Empty}";
 
-        File.AppendAllText(logFilePath, logLine + Environment.NewLine);
+        await foreach (var log in _logQueue.ReadAllAsync())
+        {
+            var date = log.Timestamp.ToString("yyyy-MM-dd");
+            var logFilePath = Path.Combine(_logsDirectory, $"api-{date}.log");
+
+            // Format baris log persis seperti milikmu
+            var logLine = $" {DateTimeOffset.Now.ToString("HH:mm:ss - DD MMM yyyy")} | {level} | {controller ?? "-"} | {action ?? "-"} | {clientIp ?? "-"} | {message} | {log.Details ?? string.Empty}";
+
+            try
+            {
+                await File.AppendAllTextAsync(logFilePath, logLine + Environment.NewLine);
+            }
+            catch
+            {
+                // Mencegah background worker berhenti kalau ada interupsi sesaat
+            }
+        }
     }
 
     public int GetLogCount(string? date = null)

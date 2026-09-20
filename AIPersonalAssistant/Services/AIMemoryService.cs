@@ -41,24 +41,62 @@ public class AIMemoryService : IAIMemoryService
             return;
         }
         var existingTopics = await _dbContext.AIMemories
-                        .Where(m => m.UserId == userId && m.Status == "Active").Select(m => new
-                        {
-                            m.Id,
-                            m.MemoryType,
-                            m.Subject,
-                            m.Key
-                        })
-                        .ToListAsync();
+                    .Where(m => m.UserId == userId && m.Status == "Active")
+                    .Select(m => new
+                    {
+                        m.Id,
+                        m.MemoryType,
+                        m.Subject,
+                        m.Key,
+                        m.ValueJson
+                    })
+                    .ToListAsync();
 
-        // 2. Format menjadi teks ringkas per baris
+        // Helper lokal untuk menghitung total pasang atribut di dalam objek JSON
+        static int CountAttributes(string? json)
+        {
+            if (string.IsNullOrWhiteSpace(json)) return 0;
+            try
+            {
+                using var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty("attributes", out var attrs) && attrs.ValueKind == JsonValueKind.Object)
+                    return attrs.EnumerateObject().Count();
+            }
+            catch { }
+            return 0;
+        }
+
+        // 2. Hitung berapa banyak memori riil yang sudah matang (>= 8 atribut)
+        int matureMemoryCount = existingTopics.Count(m => CountAttributes(m.ValueJson) >= 8);
+
+        // 3. Tentukan jumlah seed dinamis (sliding scale)
+        int seedsToTake = matureMemoryCount switch
+        {
+            0 => 4,
+            1 or 2 => 3,
+            3 => 2,
+            _ => 1 // Tetap sisakan 1 Gold Seed secara permanen sebagai acuan format
+        };
+
+        // 4. Ambil seed memory dari database sesuai kuota
+        var seedMemories = await _dbContext.AIMemories
+            .Where(m => m.Status == "SeedMemory")
+            .OrderBy(m => m.Id)
+            .Take(seedsToTake)
+            .Select(s => $"- Type: {s.MemoryType} | Subject: {s.Subject} | Key: {s.Key} | BenchmarkFormat: {s.ValueJson}")
+            .ToListAsync();
+
+        var seedCatalogText = string.Join("\n", seedMemories);
+
+        // 5. Format katalog memori aktif riil pengguna (cukup 1 baris ringkas per topik)
         var topicsCatalogText = existingTopics.Any()
             ? string.Join("\n", existingTopics.Select(t => $"- ID: {t.Id} | Type: {t.MemoryType} | Subject: {t.Subject} | Key: {t.Key}"))
             : "(Belum ada memori yang tercatat)";
 
-
-
+        // 6. Serialisasi log aktivitas dan inject ke prompt ekstraksi
         var activitiesJson = JsonSerializer.Serialize(activitiesToProcess);
-        var extractionPrompt = AIprompt.BuildExtractionPrompt(activitiesJson, topicsCatalogText);
+        var extractionPrompt = AIprompt.BuildExtractionPrompt(activitiesJson, topicsCatalogText, seedCatalogText);
+        Console.WriteLine(extractionPrompt);
 
         var extractionResultJson = await _aiClient.ExecuteGeminiJsonApi(extractionPrompt);
 
