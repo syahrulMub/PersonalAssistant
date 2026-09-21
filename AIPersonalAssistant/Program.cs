@@ -183,6 +183,15 @@ RecurringJob.AddOrUpdate<SchedulerMethod>(
 RecurringJob.AddOrUpdate<SchedulerMethod>(
     "daily-ai-mornig-summary",
     job => job.GenerateMorningSummaryAsync(),
+    "0 7 * * *",
+    new RecurringJobOptions
+    {
+        TimeZone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Jakarta")
+    });
+
+RecurringJob.AddOrUpdate<SchedulerMethod>(
+    "send-ai-mornig-summary",
+    job => job.SendEmailMorningBriefingAsync(),
     "0 8 * * *",
     new RecurringJobOptions
     {

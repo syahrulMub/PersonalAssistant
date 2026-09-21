@@ -31,4 +31,21 @@ public class AiRecapService
 
         return recap;
     }
+    public async Task<AIDailySummary> SaveRecapJsonAsync(string contentJson, int userId)
+    {
+
+        var recap = new AIDailySummary
+        {
+            CreatedAt = DateTime.Now,
+            ContentJson = contentJson,
+            BriefingDate = DateTime.Now.Date.ToString("dd - MMM - yyyy"),
+            IsEmailSent = false,
+            UserId = userId
+        };
+
+        _dbContext.AIDailySummaries.Add(recap);
+        await _dbContext.SaveChangesAsync();
+
+        return recap;
+    }
 }
