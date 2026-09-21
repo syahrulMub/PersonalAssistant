@@ -96,14 +96,14 @@ public class AIMemoryService : IAIMemoryService
         // 6. Serialisasi log aktivitas dan inject ke prompt ekstraksi
         var activitiesJson = JsonSerializer.Serialize(activitiesToProcess);
         var extractionPrompt = AIprompt.BuildExtractionPrompt(activitiesJson, topicsCatalogText, seedCatalogText);
-        Console.WriteLine(extractionPrompt);
+        //Console.WriteLine(extractionPrompt);
 
         var extractionResultJson = await _aiClient.ExecuteGeminiJsonApi(extractionPrompt);
 
         var extractionResponse = JsonSerializer.Deserialize<MemoryExtractionResponse>(
             extractionResultJson,
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
+        //Console.WriteLine(extractionResultJson);
         if (extractionResponse?.Memories == null || !extractionResponse.Memories.Any())
         {
             _logger.LogInformation("Tidak ada kandidat memori yang diekstrak.");

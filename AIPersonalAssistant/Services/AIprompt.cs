@@ -71,7 +71,7 @@ public static class AIprompt
                 {{
                 ""sourceId"": 0,
                 ""sourceType"": ""Activity"",
-                ""observationValue"": ""string isi log aktivitas asli""
+                ""observationValue"": ""string isi log aktivitas asli + Note""
                 }}
             ]
             }}
@@ -157,7 +157,9 @@ public static class AIprompt
 
             4. IGNORE:
             - Gunakan jika informasi pada kandidat sudah tercatat lengkap di memori lama tanpa ada hal baru yang bernilai.
-
+            
+            Untuk setiap keputusan CREATE dan UPDATE, WAJIB salin seluruh data 'evidence' dari kandidat terkait ke dalam field 'evidence' keputusan konsolidasi.
+            
             FORMAT OUTPUT:
             Wajib memberikan output HANYA array JSON valid tanpa markdown, pembuka, atau penutup:
             [
