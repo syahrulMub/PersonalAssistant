@@ -32,7 +32,7 @@ public class AIMemoryService : IAIMemoryService
             )
             .OrderBy(a => a.CreateAt)
             .Take(50)
-            .Select(a => new { a.Id, a.Title, a.Description, a.Status, a.CreateAt, a.UpdatedAt, a.MemorySyncedAt })
+            .Select(a => new { a.Id, a.Title, a.Description, a.Status, a.Note, a.CreateAt, a.UpdatedAt, a.MemorySyncedAt })
             .ToListAsync();
 
         if (!activitiesToProcess.Any())
