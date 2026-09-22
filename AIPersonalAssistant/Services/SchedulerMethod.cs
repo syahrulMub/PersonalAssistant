@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using AIPersonalAssistant.Data;
 using AIPersonalAssistant.DTOs;
@@ -161,6 +162,11 @@ FORMAT OUTPUT (Wajib JSON valid murni tanpa markdown):
                 .OrderByDescending(a => a.CompletedAt ?? a.UpdatedAt)
                 .Take(8)
                 .ToListAsync();
+            var jsonOptions = new JsonSerializerOptions
+            {
+                Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+                WriteIndented = false
+            };
 
             var yesterdayActivitiesText = yesterdayLogs.Any()
                 ? string.Join("\n", yesterdayLogs.Select(l => $"- Title: {l.Title}, Kategori: {l.Category}, Status: {l.Status}{(string.IsNullOrWhiteSpace(l.Description) ? "" : $", Deskripsi: {l.Description}")}"))
@@ -181,7 +187,7 @@ FORMAT OUTPUT (Wajib JSON valid murni tanpa markdown):
                 })
                 .ToListAsync();
 
-            var memoryUserJson = JsonSerializer.Serialize(memoryUser);
+            var memoryUserJson = JsonSerializer.Serialize(memoryUser, jsonOptions);
 
             string prompt = $@"
                 Kamu adalah asisten pribadi AI yang cerdas, suportif, dan realistis.
