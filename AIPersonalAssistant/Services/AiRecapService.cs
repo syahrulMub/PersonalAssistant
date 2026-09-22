@@ -37,6 +37,7 @@ public class AiRecapService
         var recap = new AIDailySummary
         {
             CreatedAt = DateTime.Now,
+            SummaryType = "MorningBriefing",
             ContentJson = contentJson,
             BriefingDate = DateTime.Now.Date.ToString("dd - MMM - yyyy"),
             IsEmailSent = false,
