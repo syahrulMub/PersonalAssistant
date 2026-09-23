@@ -434,9 +434,6 @@ export const VoiceAssistantModal = () => {
               <h3 className="font-bold text-sm sm:text-base leading-tight">
                 AI Voice Assistant
               </h3>
-              <p className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
-                Siri & Gemini Style Quick Assistant
-              </p>
             </div>
           </div>
 
