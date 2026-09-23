@@ -2,6 +2,7 @@ import React, { useState, useRef } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
+import { useVoiceAssistant } from "../../context/VoiceAssistantContext";
 import {
   BsSun,
   BsMoonStars,
@@ -21,6 +22,7 @@ import { FiLogOut } from "react-icons/fi";
 export function MobileNavigation() {
   const { user, logout } = useAuth();
   const { isDark, toggleTheme } = useTheme();
+  const { openAssistant, isOpen: isVoiceOpen } = useVoiceAssistant();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -514,21 +516,24 @@ export function MobileNavigation() {
             )}
           </Link>
 
-          {/* Tab 3: [Reflect] (Tombol Diam, Partikel Antigravity & 2-3 Base Warna) */}
-          <Link
-            to="/activity"
-            title="Refleksi Cepat"
-            className="flex flex-col items-center -mt-5 group"
+          {/* Tab 3: [Voice AI] (Tombol Lingkaran Utama: Buka Voice Assistant Bottom Sheet) */}
+          <button
+            type="button"
+            onClick={openAssistant}
+            title="Bicara dengan AI Voice Assistant"
+            className="flex flex-col items-center -mt-5 group focus:outline-none"
           >
             {/* Lingkaran Tombol Diam (Statis & Overflow Hidden) */}
             <div
               className={`w-12 h-12 rounded-full relative overflow-hidden flex items-center justify-center shadow-lg transition-transform duration-200 active:scale-95 group-hover:scale-105 border-2 ${
-                isDark
-                  ? "border-[#090D16] shadow-ai-violet-950/60"
-                  : "border-white shadow-ai-violet-500/25"
+                isVoiceOpen
+                  ? "border-ai-violet-500 shadow-glow-violet scale-105"
+                  : isDark
+                    ? "border-[#090D16] shadow-ai-violet-950/60"
+                    : "border-white shadow-ai-violet-500/25"
               }`}
             >
-              {/* 1. Internal Rotating Gradient (Hanya 2-3 Base Warna: AI Violet #7C3AED & Sage Green #3D996E) */}
+              {/* 1. Internal Rotating Gradient (AI Violet & Sage Green) */}
               <div className="absolute -inset-2 bg-[conic-gradient(from_0deg,#7C3AED,#3D996E,#8B5CF6,#7C3AED)] animate-spin-slow opacity-85 blur-[1px]" />
 
               {/* 2. Frosted Inner Glass Mask untuk Kedalaman & Kontras */}
@@ -552,16 +557,16 @@ export function MobileNavigation() {
 
             <span
               className={`text-[10px] font-semibold mt-1 transition-colors ${
-                isActive("/activity")
+                isVoiceOpen
                   ? "text-ai-violet-600 dark:text-ai-violet-400 font-bold"
                   : isDark
                     ? "text-[#94A3B8] group-hover:text-[#F8FAFC]"
                     : "text-slate-500 group-hover:text-slate-900"
               }`}
             >
-              Reflect
+              Bicara
             </span>
-          </Link>
+          </button>
 
           {/* Tab 4: [Memori] (Mengarah ke Fitur AI & Memory) */}
           <Link

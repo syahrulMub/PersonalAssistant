@@ -2,6 +2,7 @@ using System.Security.Claims;
 using AIPersonalAssistant.Data;
 using AIPersonalAssistant.DTOs;
 using AIPersonalAssistant.DTOs.AIReflectionActivity;
+using AIPersonalAssistant.DTOs.TracebackMemory;
 using AIPersonalAssistant.Extension;
 using AIPersonalAssistant.Models;
 using AIPersonalAssistant.Services;
@@ -20,17 +21,19 @@ public class ActivityController : ControllerBase
     private readonly ILogger<ActivityController> _logger;
     private readonly AIGeminiService _aiGeminiService;
     private readonly ReflectionService _reflectionService;
+    private readonly TracebackMemoryService _tracebackService;
 
     public ActivityController(
         AppDbContext dbContext,
         ILogger<ActivityController> logger,
         AIGeminiService aiGeminiService,
-        ReflectionService reflectionService)
+        ReflectionService reflectionService, TracebackMemoryService tracebackMemoryService)
     {
         _dbContext = dbContext;
         _logger = logger;
         _aiGeminiService = aiGeminiService;
         _reflectionService = reflectionService;
+        _tracebackService = tracebackMemoryService;
     }
 
     [HttpGet]
@@ -718,5 +721,28 @@ public class ActivityController : ControllerBase
         int userId = User.GetUserId();
         var result = await _reflectionService.ProcessReflectionTranscriptAsync(userId, request);
         return Ok(result);
+    }
+
+    [HttpPost("traceback-memory")]
+    public async Task<IActionResult> TracebackMemory(VoiceProcessRequestDto voiceProcessRequestDto)
+    {
+        try
+        {
+            if (voiceProcessRequestDto == null || string.IsNullOrWhiteSpace(voiceProcessRequestDto.UserSpeechInput))
+            {
+                return BadRequest(new { message = "Input suara tidak boleh kosong." });
+            }
+            var userId = User.GetUserId();
+            var result = await _tracebackService.ProcessTurnAsync(userId, voiceProcessRequestDto);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new
+            {
+                message = "Terjadi kendala saat memproses interaksi suara.",
+                detail = ex.Message
+            });
+        }
     }
 }

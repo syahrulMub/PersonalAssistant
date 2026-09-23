@@ -74,6 +74,7 @@ builder.Services.AddSwaggerGen(options =>
 // API logging queue & background worker
 builder.Services.AddSingleton<ILogQueue, LogQueue>();
 builder.Services.AddSingleton<ApiLogService>();
+builder.Services.AddScoped<TracebackMemoryService>();
 builder.Services.AddHostedService<LogQueueBackgroundWorker>();
 
 //email configuration

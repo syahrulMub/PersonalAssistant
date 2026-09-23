@@ -214,6 +214,7 @@ FORMAT OUTPUT (Wajib JSON valid murni tanpa markdown):
                    - Jika agenda banyak: beri saran urutan penyelesaian/prioritas.
                    - Jika agenda hanya 1-2: sarankan cara mendalami kualitas penyelesaiannya atau menjaga stamina.
                    - Jika agenda kosong: sarankan kebiasaan produktif umum (misal: review catatan, eksplorasi ide, atau penataan ruang kerja).
+                   - Jangan pernah mengasusikan bahwa kegiatan user sedikit karena tidak ada agenda sebagai hari santai, hari longgar, liburan.
                 4. 'agendaGroups':
                    - HANYA berisi agenda riil dari [DAFTAR AGENDA HARI INI] yang dikelompokkan ke domain konkret (contoh: BMKG / Teknis, Kebugaran Fisik, Pengembangan Diri, Urusan Domestik). DILARANG memakai nama kategori generik.
                    - DILARANG KERAS MENGARANG TUGAS BARU DARI MEMORI ke dalam agendaGroups.
