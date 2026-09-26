@@ -180,6 +180,9 @@ public class BackgroundReminderService : BackgroundService
                     activity.IsReminder = false;
                     dbContext.ActivityLogs.Update(activity);
                 }
+
+                // Jeda antar email agar mematuhi batasan rate limit SMTP provider (misal Mailtrap 1 email/detik)
+                await Task.Delay(1500);
             }
         }
 

@@ -290,6 +290,9 @@ FORMAT OUTPUT (Wajib JSON valid murni tanpa markdown):
 
                 summary.IsEmailSent = true;
                 summary.EmailSendAt = DateTime.Now;
+
+                // Jeda antar pengiriman email agar mematuhi batasan rate limit SMTP
+                await Task.Delay(1500);
             }
             catch (Exception ex)
             {

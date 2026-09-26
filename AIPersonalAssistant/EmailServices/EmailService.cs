@@ -29,27 +29,46 @@ public class EmailService : IEmailSevice
             HtmlBody = body
         };
         message.Body = BodyBuilder.ToMessageBody();
-        using (var client = new SmtpClient())
+        const int maxRetries = 2;
+        for (int attempt = 1; attempt <= maxRetries; attempt++)
         {
-            try
+            using (var client = new SmtpClient())
             {
-                _apiLogService.LogEmail($"Preparing email send. Subject={subject} Recipient={recipient}", subject, recipient, "EmailService", "SendEmailAsync");
+                try
+                {
+                    _apiLogService.LogEmail($"Preparing email send (attempt {attempt}). Subject={subject} Recipient={recipient}", subject, recipient, "EmailService", "SendEmailAsync");
 
-                await client.ConnectAsync(_emailSettings.SmtpServer, _emailSettings.Port, MailKit.Security.SecureSocketOptions.StartTls);
-                await client.AuthenticateAsync(_emailSettings.SenderEmail, _emailSettings.Password);
-                await client.SendAsync(message);
-                await client.DisconnectAsync(true);
+                    await client.ConnectAsync(_emailSettings.SmtpServer, _emailSettings.Port, MailKit.Security.SecureSocketOptions.Auto);
 
-                _logger.LogInformation($"Email sent to {recipient} with subject: {subject}");
-                _apiLogService.LogEmail($"Email sent successfully. Subject={subject} Recipient={recipient}", subject, recipient, "EmailService", "SendEmailAsync");
-                return true;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to send email to {Recipient} with subject {Subject}", recipient, subject);
-                _apiLogService.LogEmailError(ex, subject, recipient, "EmailService", "SendEmailAsync");
-                return false;
+                    var authUser = !string.IsNullOrWhiteSpace(_emailSettings.Username)
+                        ? _emailSettings.Username
+                        : _emailSettings.SenderEmail;
+
+                    if (!string.IsNullOrWhiteSpace(authUser) && !string.IsNullOrWhiteSpace(_emailSettings.Password))
+                    {
+                        await client.AuthenticateAsync(authUser, _emailSettings.Password);
+                    }
+
+                    await client.SendAsync(message);
+                    await client.DisconnectAsync(true);
+
+                    _logger.LogInformation($"Email sent to {recipient} with subject: {subject}");
+                    _apiLogService.LogEmail($"Email sent successfully. Subject={subject} Recipient={recipient}", subject, recipient, "EmailService", "SendEmailAsync");
+                    return true;
+                }
+                catch (SmtpCommandException ex) when (attempt < maxRetries && ex.Message.Contains("Too many emails per second", StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.LogWarning("Terkena rate limit SMTP (Too many emails per second). Menunggu 2 detik lalu mencoba ulang...");
+                    await Task.Delay(2000);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to send email to {Recipient} with subject {Subject}", recipient, subject);
+                    _apiLogService.LogEmailError(ex, subject, recipient, "EmailService", "SendEmailAsync");
+                    return false;
+                }
             }
         }
+        return false;
     }
 }
