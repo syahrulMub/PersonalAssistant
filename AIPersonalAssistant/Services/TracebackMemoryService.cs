@@ -217,7 +217,6 @@ public class TracebackMemoryService
                         };
                     }).ToList();
                 var result = JsonSerializer.Serialize(structuredResult, _jsonOptions);
-                _logger.LogInformation("json result" + result);
                 return result;
             }
 
