@@ -18,6 +18,7 @@ import { useSpeechRecognition } from "../useSpeechRecognition";
 import { useVoiceAssistant } from "../../context/VoiceAssistantContext";
 import { useTheme } from "../../context/ThemeContext";
 import { formatWibTime, toInputDatetimeString } from "../../utils/dateUtils";
+import { MarkdownRenderer } from "../common/MarkdownRenderer";
 
 const CATEGORIES = [
   { value: "Productivity", label: "💼 Productivity" },
@@ -52,7 +53,7 @@ export const VoiceAssistantModal = () => {
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
 
   // Evaluasi batas limit
-  const isLimitReached = currentTurn >= 4 || isSessionEnded;
+  const isLimitReached = currentTurn >= 7 || isSessionEnded;
   const isAiInputDisabled = isLimitReached || isEditingSchedule;
 
   // TTS SpeechSynthesis ref
@@ -231,6 +232,8 @@ export const VoiceAssistantModal = () => {
       const aiTurnItem = {
         speaker: "Assistant",
         message: data.textToSpeak,
+        reportMarkdown: data.reportMarkdown || "",
+        memoryMutations: data.memoryMutations || [],
         schedules: data.proposedSchedules || [],
       };
       setConversationHistory((prev) => [...prev, aiTurnItem]);
@@ -440,17 +443,17 @@ export const VoiceAssistantModal = () => {
           <div className="flex items-center gap-2">
             {/* Turn Counter Badge */}
             <span
-              className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold tracking-tight border transition-colors ${
+              className={`px-3.5 py-0.5 rounded-full text-[10px] font-mono font-bold tracking-tight border transition-colors ${
                 isLimitReached
                   ? "bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-900/60"
-                  : currentTurn === 3
+                  : currentTurn === 6
                     ? "bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-900/60"
                     : "bg-ai-violet-100 dark:bg-ai-violet-950/60 text-ai-violet-700 dark:text-ai-violet-300 border-ai-violet-200 dark:border-ai-violet-800/60"
               }`}
             >
               {isLimitReached
-                ? "Sesi Berakhir (4/4)"
-                : `Turn ${currentTurn}/4 (Sisa ${Math.max(0, 4 - currentTurn)})`}
+                ? "Sesi Berakhir (7/7)"
+                : `Turn ${currentTurn}/7 (Sisa ${Math.max(0, 7 - currentTurn)})`}
             </span>
 
             {/* Close Button (X) */}
@@ -570,6 +573,13 @@ export const VoiceAssistantModal = () => {
                   ditutup.
                 </span>
               </div>
+              <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-300 text-[11px] leading-relaxed flex items-center gap-2">
+                <span className="text-sm flex-shrink-0">💡</span>
+                <span>
+                  Jika AI keliru membaca riwayat atau status tugasmu, sanggah
+                  langsung di percakapan untuk memperbarui memorinya.
+                </span>
+              </div>
             </div>
           )}
 
@@ -591,6 +601,21 @@ export const VoiceAssistantModal = () => {
                     <p className="leading-relaxed whitespace-pre-line">
                       {item.message}
                     </p>
+
+                    {/* TAMPUNGAN FORMAT RICH MARKDOWN (LAPORAN & RINGKASAN DETAIL) */}
+                    {item.reportMarkdown && (
+                      <div className="pt-2.5 mt-2 border-t border-slate-200/80 dark:border-slate-700/80 space-y-2">
+                        <div className="flex items-center justify-between text-[11px] font-mono font-bold text-ai-violet-700 dark:text-ai-violet-300">
+                          <span className="flex items-center gap-1.5">
+                            <span>📊</span>
+                            <span>LAPORAN & RINGKASAN VISUAL</span>
+                          </span>
+                        </div>
+                        <div className="p-3.5 rounded-xl bg-white/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-700/70 shadow-xs">
+                          <MarkdownRenderer content={item.reportMarkdown} />
+                        </div>
+                      </div>
+                    )}
 
                     {/* KARTU USULAN JADWAL (READ-ONLY PREVIEW) JIKA TIDAK SEDANG DALAM MODE EDIT */}
                     {!isEditingSchedule &&

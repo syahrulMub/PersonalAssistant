@@ -11,7 +11,7 @@ public class TracebackMemory
     public int UserId { get; set; }
 
     public int CurrentTurn { get; set; } = 1;
-    public int MaxTurns { get; set; } = 4;
+    public int MaxTurns { get; set; } = 7;
     public bool IsCompleted { get; set; } = false;
 
     // Menyimpan array JSON teks percakapan (List<VoiceTurnItemDto>)

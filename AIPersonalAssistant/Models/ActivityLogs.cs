@@ -15,7 +15,6 @@ public class ActivityLogs
     public DateTime? ReminderTime { get; set; }
     public DateTime? OriginalReminderTime { get; set; }
     public int RescheduleCount { get; set; } = 0;
-
     public DateTime CreateAt { get; set; }
     public DateTime UpdatedAt { get; set; }
     public DateTime? CompletedAt { get; set; }

@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using AIPersonalAssistant.Data;
 using AIPersonalAssistant.DTOs;
 using AIPersonalAssistant.EmailServices;
@@ -192,7 +193,7 @@ public class AIGeminiService
             generationConfig = new
             {
                 responseMimeType = "application/json",
-                temperature = 0.1
+                temperature = 0.1,
             }
         };
 
@@ -393,6 +394,256 @@ public class AIGeminiService
                 }
             };
         }
+    }
+
+
+    public async Task<string> ExecuteGeminiFunctionCallingAsync(
+        string prompt,
+        object? toolsDefinition = null,
+        Func<string, JsonElement, Task<string>>? toolExecutor = null,
+        string feature = "AIMemoryCompiler",
+        bool forceJsonResponse = true,
+        CancellationToken cancellationToken = default)
+    {
+        string? keyFeature = _configuration[$"Gemini:{feature}"] ?? _configuration["Gemini:ApiKeyAIMemoryCompiler"];
+        if (string.IsNullOrWhiteSpace(keyFeature))
+        {
+            throw new InvalidOperationException($"Gemini API key for feature '{feature}' is not configured.");
+        }
+
+        var candidateModels = _configuration.GetSection("Gemini:CandidateModels").Get<string[]>();
+        if (candidateModels == null || candidateModels.Length == 0)
+        {
+            candidateModels = new[]
+            {
+                "gemini-3.5-flash-lite",
+                "gemini-flash-lite-latest",
+                "gemini-3.5-flash",
+                "gemini-3.6-flash"
+            };
+        }
+
+        string lastErrorMessage = "Tidak ada model yang dapat dihubungi.";
+
+        // --- CYCLE LOOP MODEL FALLBACK ---
+        foreach (var modelName in candidateModels)
+        {
+            if (string.IsNullOrWhiteSpace(modelName)) continue;
+            var cleanModel = modelName.Replace("models/", "").Trim();
+
+            try
+            {
+                _logger.LogInformation("Memulai request ke Gemini dengan model: {Model}", cleanModel);
+
+                // 1. RAKIT PAYLOAD AWAL (TURN 1)
+                var contentsList = new List<object>
+                {
+                    new
+                    {
+                        role = "user",
+                        parts = new object[] { new { text = prompt } }
+                    }
+                };
+                var genConfig = new JsonObject
+                {
+                    ["temperature"] = 0.1
+                };
+                if (cleanModel.Contains("thinking", StringComparison.OrdinalIgnoreCase))
+                {
+                    genConfig["thinkingConfig"] = new JsonObject { ["thinkingBudget"] = 0 };
+                }
+
+                if (forceJsonResponse && toolsDefinition == null)
+                {
+                    genConfig["responseMimeType"] = "application/json";
+                }
+
+                var payloadObject = new JsonObject
+                {
+                    ["contents"] = JsonSerializer.SerializeToNode(contentsList),
+                    ["generationConfig"] = genConfig
+                };
+
+                if (forceJsonResponse && toolsDefinition == null)
+                {
+                    payloadObject["generationConfig"]!["responseMimeType"] = "application/json";
+                }
+
+                if (toolsDefinition != null)
+                {
+                    payloadObject["tools"] = JsonSerializer.SerializeToNode(toolsDefinition);
+                }
+
+                // 2. HIT PERTAMA KE GEMINI
+                var responseContent = await PostToGeminiWithRetryAsync(cleanModel, keyFeature, payloadObject.ToJsonString(), cancellationToken);
+                using var document = JsonDocument.Parse(responseContent);
+                var candidate = document.RootElement.GetProperty("candidates")[0];
+                var parts = candidate.GetProperty("content").GetProperty("parts");
+
+                // 3. DETEKSI APAKAH GEMINI MEMINTA FUNCTION CALL
+                JsonElement? functionCallPart = null;
+                foreach (var part in parts.EnumerateArray())
+                {
+                    if (part.TryGetProperty("functionCall", out var fc))
+                    {
+                        functionCallPart = fc;
+                        break;
+                    }
+                }
+
+                // JIKA TIDAK ADA TOOL CALL -> Ambil teks langsung (Kasus Normal 80% Selesai di Sini)
+                if (!functionCallPart.HasValue || toolExecutor == null)
+                {
+                    return ExtractTextFromParts(parts);
+                }
+
+                // 4. JIKA ADA TOOL CALL -> EKSEKUSI FUNGSI C# / SQL
+                var fnName = functionCallPart.Value.GetProperty("name").GetString()!;
+                var fnArgs = functionCallPart.Value.GetProperty("args");
+
+                _logger.LogInformation("[Tool Call Detected] Menjalankan fungsi: {FnName}", fnName);
+                string toolExecutionResult = await toolExecutor(fnName, fnArgs);
+                var modelTurnContentNode = JsonNode.Parse(candidate.GetProperty("content").GetRawText());
+                JsonNode? parsedToolResult;
+                try
+                {
+                    parsedToolResult = JsonNode.Parse(toolExecutionResult);
+                }
+                catch
+                {
+                    parsedToolResult = JsonValue.Create(toolExecutionResult);
+                }
+                // 5. RAKIT PAYLOAD TURN 2 (Kirim hasil tool balik ke model yang sama)
+                var turn2Contents = new JsonArray
+                {
+                    // History User
+                    new { role = "user", parts = new object[] { new { text = prompt } } },
+                    
+                    // History Call dari Model
+                    new JsonObject
+                    {
+                        ["role"] = "user",
+                        ["parts"] = new JsonArray
+                        {
+                            new JsonObject { ["text"] = prompt }
+                        }
+                    },
+                    modelTurnContentNode!,
+                    // Respon dari Fungsi C#
+                    new JsonObject
+                    {
+                        ["role"] = "user",
+                        ["parts"] = new JsonArray
+                        {
+                            new JsonObject
+                            {
+                                ["functionResponse"] = new JsonObject
+                                {
+                                    ["name"] = fnName,
+                                    ["response"] = new JsonObject
+                                    {
+                                        ["output"] = parsedToolResult
+                                    }
+                                }
+                            }
+                        }
+                    }
+                };
+                var genConfigTurn2 = new JsonObject
+                {
+                    ["temperature"] = 0.1
+                };
+
+                if (cleanModel.Contains("thinking", StringComparison.OrdinalIgnoreCase))
+                {
+                    genConfigTurn2["thinkingConfig"] = new JsonObject { ["thinkingBudget"] = 0 };
+                }
+
+                if (forceJsonResponse)
+                {
+                    genConfigTurn2["responseMimeType"] = "application/json";
+                }
+
+                var payloadTurn2 = new JsonObject
+                {
+                    ["contents"] = turn2Contents, // <-- Sekarang menggunakan turn2Contents yang benar!
+                    ["generationConfig"] = genConfigTurn2
+                };
+
+                if (forceJsonResponse)
+                {
+                    payloadTurn2["generationConfig"]!["responseMimeType"] = "application/json";
+                }
+
+                // 6. HIT KEDUA (Hanya terjadi jika tool terpanggil)
+                var responseContentTurn2 = await PostToGeminiWithRetryAsync(cleanModel, keyFeature, payloadTurn2.ToJsonString(), cancellationToken);
+                using var docTurn2 = JsonDocument.Parse(responseContentTurn2);
+                var partsTurn2 = docTurn2.RootElement.GetProperty("candidates")[0].GetProperty("content").GetProperty("parts");
+
+                return ExtractTextFromParts(partsTurn2);
+            }
+            catch (Exception ex)
+            {
+                lastErrorMessage = ex.Message;
+                _logger.LogWarning("Model {Model} gagal diproses: {Msg}. Beralih ke kandidat berikutnya...", cleanModel, ex.Message);
+                await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
+            }
+        }
+
+        throw new InvalidOperationException($"Seluruh kandidat model Gemini gagal. Error terakhir: {lastErrorMessage}");
+    }
+
+    private async Task<string> PostToGeminiWithRetryAsync(string cleanModel, string apiKey, string jsonPayload, CancellationToken cancellationToken)
+    {
+        var url = $"https://generativelanguage.googleapis.com/v1beta/models/{cleanModel}:generateContent?key={apiKey}";
+        var safeUrlForLog = url.Replace(apiKey, "***REDACTED***");
+
+        for (int attempt = 1; attempt <= 2; attempt++)
+        {
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            linkedCts.CancelAfter(TimeSpan.FromSeconds(15)); // Timeout diperketat agar tidak macet
+
+            try
+            {
+                var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+                var response = await _httpClient.PostAsync(url, content, linkedCts.Token);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                    _apiLogService.LogThirdParty("Gemini", safeUrlForLog, "POST", (int)response.StatusCode, $"Success with {cleanModel}", jsonPayload, responseBody, "AIGeminiService", "ExecuteGeminiUniversalAsync");
+                    return responseBody;
+                }
+
+                if ((int)response.StatusCode != 429 && (int)response.StatusCode != 503)
+                {
+                    var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                    throw new HttpRequestException($"Gemini API Error [{(int)response.StatusCode}]: {errorBody}");
+                }
+
+                await Task.Delay(TimeSpan.FromSeconds(2), linkedCts.Token);
+            }
+            catch (Exception ex) when (attempt < 2 && (ex is HttpRequestException || ex is OperationCanceledException))
+            {
+                _logger.LogWarning("Jaringan kendala ke {Model} percobaan {Attempt}: {Msg}", cleanModel, attempt, ex.Message);
+                await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
+            }
+        }
+
+        throw new TimeoutException($"Koneksi ke {cleanModel} timeout setelah 2 percobaan.");
+    }
+
+    private static string ExtractTextFromParts(JsonElement parts)
+    {
+        var sb = new StringBuilder();
+        foreach (var part in parts.EnumerateArray())
+        {
+            if (part.TryGetProperty("text", out var textElem))
+            {
+                sb.Append(textElem.GetString());
+            }
+        }
+        return CleanMarkdownBlock(sb.ToString());
     }
     private static string CleanMarkdownBlock(string rawText)
     {

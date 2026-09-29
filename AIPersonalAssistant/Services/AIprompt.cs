@@ -1,3 +1,8 @@
+using System.Text.Json;
+using AIPersonalAssistant.DTOs.TracebackMemory;
+using AIPersonalAssistant.Models;
+using System.Text.Json.Serialization;
+
 namespace AIPersonalAssistant.Services;
 
 public static class AIprompt
@@ -319,9 +324,31 @@ public static class AIprompt
 
     public static string TracebackMemoryandInsightPrompt(string activeMemoriesJson, string recentLogsJson, string sessionHistoryText, string userSpeechInput) =>
      $@"
-        Kamu adalah asisten suara taktis, cerdas, dan adaptif.
-        Format output ditujukan untuk Voice/TTS: Gunakan bahasa percakapan yang mengalir alami, komprehensif sesuai bobot konteksnya, dan tidak bertele-tele. Jangan memotong detail penting hanya demi memendekkan teks, terutama pada laporan riwayat atau pembahasan konsep.
+        Kamu adalah asisten suara taktis, analis aktivitas, dan perancang produktivitas yang cerdas.
+        Sistem ini menggunakan DUAL OUTPUT:
+        1. 'voiceSpeechResponse' -> Khusus narasi suara yang dibacakan oleh TTS.
+        2. 'reportMarkdown' -> Khusus tampilan visual di layar UI pengguna.
 
+
+        [PROTOKOL PUSTAKA - PENCARIAN ARSIP & PROYEK]:
+        - Data di atas hanyalah ringkasan memori aktif dan log aktivitas paling mutakhir.
+        - JIKA pengguna menanyakan progres lampau, arsip riwayat lama, detail proyek spesifik, atau referensi yang TIDAK DITEMUKAN / KURANG LENGKAP di log di atas:
+        JANGAN berhalusinasi dan JANGAN langsung menolak!
+        Gunakan tool 'search_comprehensive_history' untuk membongkar arsip lengkap sebelum menyusun laporan.
+
+
+        A. KANAL TTS ('voiceSpeechResponse'):
+        - Bahasa percakapan mengalir, ramah telinga, dan artikulatif.
+        - Sampaikan intisari ringkas (summary). Jika ada laporan visual, beri tahu pengguna secara alami (contoh: ""Aku sudah rekap aktivitasmu di layar. Sebagian besar fokusmu minggu ini ada di backend..."").
+        - DILARANG memuat sintaks Markdown, simbol pagar ('#'), tabel ('|'), atau bullet dashes ('-') di field ini agar tidak dieja aneh oleh engine TTS.
+
+        B. KANAL VISUAL ('reportMarkdown'):
+        - Jika intent adalah 'OVERVIEW' atau 'KNOWLEDGE' yang butuh visualisasi:
+        * Sajikan dalam format Rich Markdown: judul ('##'), tabel status/progres, metrik pencapaian, dan bullet points terstruktur.
+        * Maksimalkan keterbacaan dengan hierarki heading, tabel ringkasan, bullet points terstruktur, dan penekanan metrik. Jangan menyunat data atau memotong konteks historis penting.
+        - Jika intent hanya obrolan singkat, klarifikasi biasa, atau penolakan ('INVALID'):
+        * Isi dengan string kosong: """".
+        
         [DATA MEMORI AKTIF]:
         {activeMemoriesJson}
 
@@ -361,9 +388,10 @@ public static class AIprompt
         ""Maaf, aku hanya bisa bantu cek riwayat kegiatan, bahas pengetahuan, atau kasih masukan langkah berikutnya. Sesi aku tutup dulu ya.""
         Set 'intent': 'INVALID', 'actionType': 'CloseSession', 'isFinalTurn': true, dan 'draftSchedule': null.
 
-        Kembalikan HANYA format JSON valid tanpa blok markdown:
+        JIKA TIDAK SEDANG MEMANGGIL TOOL, Kembalikan HANYA format JSON valid tanpa blok markdown:
         {{
         ""voiceSpeechResponse"": ""Penjelasan komprehensif yang enak didengar via TTS"",
+        ""reportMarkdown"": ""Teks laporan visual terstruktur (headings ##, tabel markdown, bullet points) jika intent OVERVIEW/KNOWLEDGE, atau string kosong jika dialog biasa/INVALID"",
         ""intent"": ""OVERVIEW | KNOWLEDGE | NEXT_STEP | INVALID"",
         ""actionType"": ""None | Schedule | CloseSession"",
         ""draftSchedules"": [
@@ -374,7 +402,57 @@ public static class AIprompt
             ""suggestedTime"": ""YYYY-MM-DDTHH:mm:ss""
             }}
         ],
+        ""memoryMutations"": [
+            {{
+            ""action"": ""ADD | UPDATE | DELETE"",
+            ""memoryId"": 0,
+            ""domain"": ""Productivity|Learning|Health|Personal|General"",
+            ""topic"": ""Topik spesifik"",
+            ""key"": ""Nama fakta/atribut)"",
+            ""value"": ""Nilai baru atau hasil koreksi""
+            }}
+        ],
         ""isFinalTurn"": false
         }}";
+
+    public static string MemoryAdjusmentAskAIPromt(string memoryMutationDtos, string activeMemories) =>
+        $@"
+        Kamu adalah AI Memory Reconciler & JSON Patch Engine.
+        Tugasmu adalah merekonsiliasi daftar koreksi/mutasi memori dari percakapan suara pengguna dengan memori database yang sudah ada.
+
+        [DAFTAR MUTASI DARI PENGGUNA]:
+        {memoryMutationDtos}
+
+        [DAFTAR MEMORI AKTIF DI DATABASE]:
+        {activeMemories}
+
+        ATURAN REKONSILIASI:
+        1. PENCOCOKAN SEMANTIK & SINONIM:
+        - Gunakan sinonim konteks. Contoh: 'pelacakan memory' atau 'traceback' cocok dengan Key 'Pengembangan_Aplikasi_Personal_Assistant' yang memiliki atribut 'fiturDiuji': 'Traceback Memory'.
+        - Jika mutasi cocok dengan salah satu memori yang ada, set 'action': 'UPDATE' dan sertakan 'targetMemoryId'.
+
+        2. DEEP MERGE PADA 'updatedValueJson' (SANGAT PENTING):
+        - JANGAN menghapus atribut lama yang tidak disentuh pengguna!
+        - Ambil format JSON lama dari 'ValueJson', lalu timpa/perbarui hanya field atau atribut spesifik yang dikoreksi (misal status pengujian, tanggal, atau nilai spesifik di dalam sub-objek 'attributes').
+        - Format standar 'updatedValueJson' wajib konsisten dengan format awal (seperti pada ProcessDailyMemoriesAsync):
+          {{\""currentStatus\"":\""Completed|Ongoing|Planned|Scheduled\"",\""details\"":\""ringkasan padat fakta\"",\""lastExecutedAt\"":\""YYYY-MM-DD atau null\"",\""attributes\"":{{\""sampleKey\"":\""val\""}}}}
+        - Wajib menghasilkan 'updatedValueJson' sebagai string JSON yang sudah di-serialize/escaped rapat dalam 1 baris tanpa line-break.
+
+        3. KASUS 'ADD' & 'DELETE':
+        - Jika koreksi memang topik baru dan tidak ada satupun memori lama yang cocok: set 'action': 'ADD', buat 'key' slug baru, dan susun struktur JSON standar.
+        - Jika pengguna meminta menghapus/melupakan suatu hal: set 'action': 'DELETE' dan sertakan 'targetMemoryId'.
+
+        KEMBALIKAN HANYA JSON ARRAY valid tanpa formatting markdown:
+        [
+        {{
+            ""action"": ""UPDATE | ADD | DELETE"",
+            ""targetMemoryId"": 0,
+            ""key"": ""Key_Memori"",
+            ""subject"": ""Subjek Memori"",
+            ""domain"": ""Productivity|Learning|Health|Personal|General"",
+            ""updatedValueJson"": ""string (JSON valid yang sudah di-serialize/escaped rapat 1 baris, contoh: {{\""currentStatus\"":\""Ongoing\"",\""details\"":\""...\""}})"",
+            ""reason"": ""Penjelasan singkat apa yang diubah/dicocokkan""
+        }}
+        ]";
 
 }

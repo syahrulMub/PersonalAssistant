@@ -1,6 +1,8 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using AIPersonalAssistant.Data;
 using AIPersonalAssistant.DTOs.AIMemoryBackserviceDto;
+using AIPersonalAssistant.DTOs.TracebackMemory;
 using AIPersonalAssistant.Models;
 using AIPersonalAssistant.Services.Interface;
 using Microsoft.EntityFrameworkCore;
@@ -153,6 +155,52 @@ public class AIMemoryService : IAIMemoryService
         await _dbContext.SaveChangesAsync();
 
     }
+
+    public async Task CorrectionMemoryAskAI(int userId, List<MemoryMutationDto> memoryMutationDtos)
+    {
+        if (memoryMutationDtos == null || memoryMutationDtos.Count == 0) return;
+        try
+        {
+            _logger.LogInformation("[CorrectionMemoryAskAI] Memulai rekonsiliasi {Count} koreksi untuk User ID: {UserId}", memoryMutationDtos.Count, userId);
+
+            // 1. Tarik semua memori aktif pengguna beserta ValueJson aslinya
+            var rawMemories = await _dbContext.AIMemories
+                .AsNoTracking()
+                .Where(m => m.UserId == userId && m.Status == "Active")
+                .Select(m => new
+                {
+                    m.Id,
+                    m.Key,
+                    m.Subject,
+                    m.MemoryType,
+                    m.ValueJson
+                })
+                .ToListAsync();
+
+            var rawMemoriesJson = JsonSerializer.Serialize(rawMemories);
+            var memoryMutationDtosJson = JsonSerializer.Serialize(memoryMutationDtos);
+
+            var promptString = AIprompt.MemoryAdjusmentAskAIPromt(memoryMutationDtosJson, rawMemoriesJson);
+            _logger.LogInformation("[CorrectionMemoryAskAI] Prompt:\n{Prompt}", promptString);
+            var executeGemini = await _aiClient.ExecuteGeminiJsonApi(promptString, "ApiKeyAIMemoryCompiler");
+            _logger.LogInformation("[CorrectionMemoryAskAI] Response Gemini:\n{Response}", executeGemini);
+            var cleanJson = executeGemini.Replace("```json", "", StringComparison.OrdinalIgnoreCase)
+                                   .Replace("```", "")
+                                   .Trim();
+            var patchResults = JsonSerializer.Deserialize<List<MemoryPatchResultDto>>(cleanJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (patchResults == null || patchResults.Count == 0)
+            {
+                _logger.LogInformation("[CorrectionMemoryAskAI] Gemini tidak menemukan memori yang perlu diubah.");
+                return;
+            }
+
+            await UpdateMemoryFromAskAI(userId, patchResults);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[CorrectionMemoryAskAI] Gagal melakukan rekonsiliasi memori untuk User ID {UserId}: {Message}", userId, ex.Message);
+        }
+    }
     private async Task PersistMemoryDecisionsAsync(int userId, List<MemoryDecisionDto> decisions, CancellationToken cancellationToken = default)
     {
         using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
@@ -265,7 +313,6 @@ public class AIMemoryService : IAIMemoryService
             throw;
         }
     }
-
     private static void AddEvidenceObservations(ICollection<AIMemoryObservation> targetCollection, List<MemoryEvidenceDto> evidences, int userId, DateTime now)
     {
         foreach (var ev in evidences)
@@ -280,6 +327,123 @@ public class AIMemoryService : IAIMemoryService
                 ObservedAt = now,
                 CreatedAt = now
             });
+        }
+    }
+    private async Task UpdateMemoryFromAskAI(int userId, List<MemoryPatchResultDto> patchResultDtos)
+    {
+        try
+        {
+            var now = DateTime.Now;
+            foreach (var patch in patchResultDtos)
+            {
+                var action = patch.Action?.ToUpperInvariant();
+                var memoryId = patch.TargetMemoryId;
+
+                // Pastikan ValueJson selalu minified string 1 baris lurus persis seperti ProcessDailyMemoriesAsync
+                var cleanValueJson = MinifyJson(patch.UpdatedValueJson);
+
+                // Pencarian target memori: bisa via ID (jika valid > 0) ATAU via Key
+                AIMemory? existing = null;
+                if (memoryId > 0)
+                {
+                    existing = await _dbContext.AIMemories
+                        .FirstOrDefaultAsync(m => m.Id == memoryId && m.UserId == userId);
+                }
+                if (existing == null && !string.IsNullOrWhiteSpace(patch.Key))
+                {
+                    existing = await _dbContext.AIMemories
+                        .FirstOrDefaultAsync(m => m.Key == patch.Key && m.UserId == userId && m.Status == "Active");
+                }
+
+                if (action == "UPDATE")
+                {
+                    if (existing != null)
+                    {
+                        existing.ValueJson = cleanValueJson;
+                        if (!string.IsNullOrWhiteSpace(patch.Subject)) existing.Subject = patch.Subject;
+                        if (!string.IsNullOrWhiteSpace(patch.Domain)) existing.MemoryType = patch.Domain;
+                        existing.UpdatedAt = now;
+
+                        _dbContext.AIMemoryObservations.Add(new AIMemoryObservation
+                        {
+                            UserId = userId,
+                            AIMemoryId = existing.Id,
+                            SourceType = "UserCorrection",
+                            ObservationValue = $"[Koreksi Ask AI] {patch.Reason}",
+                            ObservedAt = now,
+                            CreatedAt = now
+                        });
+                        _logger.LogInformation("[CorrectionMemoryAskAI] Berhasil update memori ID {Id}, Key {Key}", existing.Id, existing.Key);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("[CorrectionMemoryAskAI] Target memori ID {Id} / Key {Key} tidak ditemukan untuk UPDATE", memoryId, patch.Key);
+                    }
+                }
+                else if (action == "ADD" || action == "CREATE")
+                {
+                    var newMemory = new AIMemory
+                    {
+                        UserId = userId,
+                        Key = !string.IsNullOrWhiteSpace(patch.Key) ? patch.Key : $"Memory_{Guid.NewGuid():N}",
+                        Subject = patch.Subject ?? "General",
+                        MemoryType = !string.IsNullOrWhiteSpace(patch.Domain) ? patch.Domain : "Personal",
+                        ValueJson = cleanValueJson,
+                        Status = "Active",
+                        Source = "UserCorrection",
+                        Confidence = 1.0,
+                        EvidenceCount = 1,
+                        FirstObservedAt = now,
+                        LastObservedAt = now,
+                        CreatedAt = now,
+                        UpdatedAt = now
+                    };
+
+                    _dbContext.AIMemories.Add(newMemory);
+                    await _dbContext.SaveChangesAsync();
+
+                    _dbContext.AIMemoryObservations.Add(new AIMemoryObservation
+                    {
+                        UserId = userId,
+                        AIMemoryId = newMemory.Id,
+                        SourceType = "UserCorrection",
+                        ObservationValue = $"[Penambahan Baru Ask AI] {patch.Reason}",
+                        ObservedAt = now,
+                        CreatedAt = now
+                    });
+                    _logger.LogInformation("[CorrectionMemoryAskAI] Berhasil tambah memori baru ID {Id}, Key {Key}", newMemory.Id, newMemory.Key);
+                }
+                else if (action == "DELETE")
+                {
+                    if (existing != null)
+                    {
+                        existing.Status = "Archived";
+                        existing.UpdatedAt = now;
+                        _logger.LogInformation("[CorrectionMemoryAskAI] Berhasil arsipkan memori ID {Id}, Key {Key}", existing.Id, existing.Key);
+                    }
+                }
+            }
+
+            await _dbContext.SaveChangesAsync();
+            _logger.LogInformation("[CorrectionMemoryAskAI] Seluruh mutasi berhasil disimpan ke database.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[CorrectionMemoryAskAI] Gagal melakukan rekonsiliasi memori untuk User ID {UserId}: {Message}", userId, ex.Message);
+        }
+    }
+
+    private static string MinifyJson(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return "{}";
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            return JsonSerializer.Serialize(doc.RootElement);
+        }
+        catch
+        {
+            return json.Replace("\r", "").Replace("\n", "").Trim();
         }
     }
 }
