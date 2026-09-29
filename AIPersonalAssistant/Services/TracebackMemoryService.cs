@@ -229,7 +229,6 @@ public class TracebackMemoryService
         feature: "ApiKeyAskAIAssistant",
         forceJsonResponse: true
         );
-        _logger.LogInformation("data " + aiRawResponse);
         var aiResult = JsonSerializer.Deserialize<VoiceTurnResponseDto>(aiRawResponse, _jsonOptions)
                        ?? new VoiceTurnResponseDto
                        {

@@ -741,7 +741,8 @@ public class ActivityController : ControllerBase
             return StatusCode(500, new
             {
                 message = "Terjadi kendala saat memproses interaksi suara.",
-                detail = ex.Message
+                detail = ex.Message,
+                stackTrace = ex.StackTrace
             });
         }
     }
