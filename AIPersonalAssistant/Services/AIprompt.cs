@@ -461,13 +461,13 @@ public static class AIprompt
     Tugasmu: Menganalisis log riwayat sepekan dan mengompilasinya menjadi ringkasan faktual tanpa penilaian psikologis atau asumsi karakter.
 
     [DATA AKTIVITAS (7 HARI TERAKHIR)]:
-    {recentLogsJson}
+    {{recentLogsJson}}
 
     [DATA DOMAIN AKTIF]:
-    {activeDomainsJson}
+    {{activeDomainsJson}}
 
     [DATA PERCAKAPAN ASK AI (TOP TURN)]:
-    {askAIHistoryJson}
+    {{askAIHistoryJson}}
 
     1. Gunakan gaya obrolan santai-profesional sebagai rekan/partner/asisten (gunakan kata 'aku' dan 'kamu').
     2. DILARANG menggunakan bahasa laporan formal/birokratis.
@@ -476,28 +476,30 @@ public static class AIprompt
 
     ATURAN KETAT (GUARDRAILS):
     1. FILTER ANTI-META (SANGAT PENTING):
-       - focusDistributions HANYA pada [DATA AKTIVITAS (7 HARI TERAKHIR)] dan [DATA DOMAIN AKTIF] sebagai pendukung (proyek yang dikerjakan, olahraga, istirahat, belajar teknis).
+       - focusDistributions HANYA pada [DATA AKTIVITAS (7 HARI TERAKHIR)] dan [DATA DOMAIN AKTIF] sebagai pendukung, utamakan klasifikasi key memory atau title aktivitas.
        - domain berupa list data, pisahkan sesuai dengan aktivitas atau proyek yang sedang dikerjakan
        - ABAIKAN semua percakapan di mana user sedang mengoreksi bot, membetulkan memori AI, atau mengetes fitur aplikasi ini. Itu BUKAN aktivitas utama user.
     
-    2. ATURAN KETAT DISCOVERED PATTERN (DILARANG MERANGKUM!):
-    - Tangkap 2-3 benang merah dari apa yang dikerjakan sepekan ini.
-    - BUKAN menganalisis jam/waktu (jangan bahas soal kerja sampai larut malam, durasi jam, dsb).
-    - Fokus pada: modul/fitur teknis apa yang sedang banyak menyerap energi, dan aktivitas apa yang konsisten jadi penyeimbangnya di lapangan.
-    - Data pattern diambil dari [DATA DOMAIN AKTIF] dan [DATA AKTIVITAS] 
+    2. DISCOVERED PATTERN:
+    - Tuliskan penjabaran pola, ritme, atau dinamika riil dari aktivitas di log (BUKAN menganalisis jam tidur/larut malam).
+    - pisahkan setiap pola pada kategory atau fokus yang berbeda
+    - Hubungkan benang merahnya: apa yang sedang intens dikerjakan dan bagaimana dinamika atau tantangan dengan yang tercatat di log.
+    - Jumlah poin pola fleksibel mengikuti jumlah kategori yang ditemukan (1-4 poin per kategori dominan) lebih banyak lebih baik.
 
-    3. ATURAN KETAT HABIT TWEAK (DILARANG BICARA TEORI!):
-    - Berikan 2-4 saran tindakan nyata yang aplikatif dan realistis ala buku atomic habits.
-    - DILARANG menggunakan istilah teori seperti 'habit stacking', 'micro-break', 'time management', atau kalimat ceramah umum.
-    - pemberian saran disesuiakan frekuensi dengan focusDistributions
-    - TIDAK HARUS menunggu ada kendala atau masalah:
-      1. Jika ada friksi/hambatan di log: berikan solusi penyesuaian ritme yang praktis ala atomic habits.
-      2. Jika ritme sedang lancar & positif: berikan saran untuk MEMAKSIMALKAN MOMENTUM (misal: mengunci hasil riset ke kode nyata, memanfaatkan waktu senggang, atau menjaga konsistensi).
-    - Buat sarannya mengalir: bisa berupa ide agar alur kerja terasa lebih ringan, tips menjaga stamina, atau cara memanfaatkan momentum yang lagi enak.
+    3. HABIT TWEAK (AKSI PRAKTIS & FLEKSIBEL):
+    - Berikan saran tindakan praktis yang santai ('aku/kamu') ala Atomic Habits tanpa istilah teori buku (jangan sebut 'habit stacking', dsb).
+    - ATURAN PROPORSI: Setiap kategori yang ada di focusDistributions WAJIB mendapatkan minimal 1 saran konkret yang relevan dengan kegiatan aslinya.
+    - JANGAN memaksakan membuat poin tambahan klise (seperti 'bikin dokumentasi' atau 'peregangan') hanya untuk memperbanyak daftar. Kualitas dan relevansi saran jauh lebih penting daripada kuantitas.
+    - Gunakan pendekatan tuas fisik konkret (pilih yang paling relevan dengan kondisi data):
+     a. Circuit Breaker: Aksi fisik langsung untuk memutus kebuntuan kognitif saat stuck.
+     b. Rekayasa Friksi Lingkungan: Mempermudah akses ke kegiatan positif atau mempersulit distraction.
+     c. Ritual Transisi Fisik / Analog Dump: Gestur penutup yang nyata.
+    - Terapkan formula pemicu alami: 'Bila [kondisi X terjadi], coba [tindakan fisik nyata Y]'.
+    - Boleh membahas trik memperingan kerjaan, memanfaatkan momentum yang lagi enak, atau mempermudah persiapan sebelum kegiatan fisik.
 
     4. EXPLORATION KEYWORDS:
-       - Ekstrak konsep teknis/problem solving yang dieksplorasi (misal: arsitektur, algoritma, framework).
-       - ABAIKAN obrolan koreksi data (seperti koreksi nama bahasa pemrograman atau nama teman).
+       - Ekstrak konsep teknis/problem solving yang dieksplorasi.
+       - ABAIKAN obrolan koreksi data memory AI.
     KEMBALIKAN HANYA OBJEK JSON MURNI TANPA KUTIP PEMBUKA/PENUTUP STRING DAN TANPA MARKDOWN:
 
     {
