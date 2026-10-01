@@ -88,7 +88,7 @@ public class DashboardService
             try
             {
                 var jsonResult = await _aiService.ExecuteGeminiJsonApi(promptDashboard, "ApiKeyAIMemoryCompiler");
-                Console.WriteLine(jsonResult);
+                //Console.WriteLine(jsonResult);
                 var dashboardDto = JsonSerializer.Deserialize<DashboardSummaryDto>(jsonResult, new JsonSerializerOptions
                 {
                     PropertyNameCaseInsensitive = true
