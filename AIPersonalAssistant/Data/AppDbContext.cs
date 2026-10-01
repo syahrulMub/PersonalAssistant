@@ -18,6 +18,7 @@ public class AppDbContext : DbContext
     public DbSet<UserReflection> UserReflections { get; set; }
     public DbSet<AIDailySummary> AIDailySummaries { get; set; }
     public DbSet<TracebackMemory> TracebackMemories { get; set; }
+    public DbSet<DasboardSnapshot> DasboardSnapshots { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

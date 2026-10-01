@@ -87,6 +87,7 @@ builder.Services.AddHostedService<BackgroundReminderService>();
 //gemini
 builder.Services.AddHttpClient<AIGeminiService>();
 builder.Services.AddScoped<ReflectionService>();
+builder.Services.AddScoped<DashboardService>();
 
 //hangfire
 builder.Services.AddHangfire(configuration => configuration
@@ -202,6 +203,14 @@ RecurringJob.AddOrUpdate<SchedulerMethod>(
     "AI-daily-memory",
     job => job.CompileDailyAIMemoryFromActivity(),
     "0 3,10,21 * * *",
+    new RecurringJobOptions
+    {
+        TimeZone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Jakarta")
+    });
+RecurringJob.AddOrUpdate<DashboardService>(
+    "Dashboard-daily-update",
+    job => job.GenerateSummaryFromAI(),
+    "0 4 * * *",
     new RecurringJobOptions
     {
         TimeZone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Jakarta")
