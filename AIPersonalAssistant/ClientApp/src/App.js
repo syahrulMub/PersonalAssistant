@@ -6,32 +6,40 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ThemeProvider } from "./context/ThemeContext";
 import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
+import { isTokenExpired } from "./utils/authUtils";
 import "./custom.css";
 
 // Pembungkus route yang memerlukan otentikasi
 function ProtectedRoute({ children }) {
-  const { user, loading } = useAuth();
+  const { user, loading, logout } = useAuth();
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
 
   if (loading) {
     return <div className="text-center p-5">Memuat...</div>;
   }
 
-  if (!user) {
-    return <Navigate to="/login" replace />;
+  // Jika tidak ada user atau token sudah expired, tendang ke login
+  if (!user || !token || isTokenExpired(token)) {
+    if (token && isTokenExpired(token)) {
+      logout();
+    }
+    return <Navigate to="/login?expired=1" replace />;
   }
 
   return children;
 }
 
-// Pembungkus route publik/tamu (jika sudah login, redirect ke /)
+// Pembungkus route publik/tamu (jika sudah login dan token masih valid, redirect ke /)
 function PublicRoute({ children }) {
   const { user, loading } = useAuth();
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
 
   if (loading) {
     return <div className="text-center p-5">Memuat...</div>;
   }
 
-  if (user) {
+  // Hanya redirect ke home jika user ada dan token masih aktif
+  if (user && token && !isTokenExpired(token)) {
     return <Navigate to="/" replace />;
   }
 

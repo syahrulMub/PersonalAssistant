@@ -324,6 +324,7 @@ public static class AIprompt
 
     public static string TracebackMemoryandInsightPrompt(string activeMemoriesJson, string recentLogsJson, string sessionHistoryText, string userSpeechInput) =>
      $@"
+        WAKTU SAAT INI {DateTime.Now}
         Kamu adalah asisten suara taktis, analis aktivitas, dan perancang produktivitas yang cerdas.
         Sistem ini menggunakan DUAL OUTPUT:
         1. 'voiceSpeechResponse' -> Khusus narasi suara yang dibacakan oleh TTS.
@@ -376,6 +377,7 @@ public static class AIprompt
         3. 'NEXT_STEP' (Rekomendasi Langkah Terdekat):
         - Berikan rekomendasi langkah konkret berikutnya yang paling logis untuk melanjutkan proyek atau aktivitas yang sedang berjalan.
         - Tawarkan opsi untuk langsung menjadwalkan langkah tersebut ke agenda.
+        - Penjadwalan rekomendasi disesuaikan dengan jenis jadwal dan harus lebih besar dari WAKTU SAAT INI
 
         ATURAN KESINAMBUNGAN & PENJADWALAN:
         - Percakapan tetap VALID selama masih berkesinambungan dengan 3 ranah di atas (termasuk menanggapi follow-up laporan, mendiskusikan kata kunci, atau mengatur waktu jadwal).

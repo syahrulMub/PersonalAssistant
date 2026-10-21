@@ -255,7 +255,7 @@ export function CreateActivity({
             }));
           }}
           disabled={loading}
-          className="w-full px-3.5 py-2.5 text-sm rounded-xl border bg-white dark:bg-[#0F172A] border-slate-200 dark:border-[#334155] text-slate-900 dark:text-[#F8FAFC] font-mono focus:outline-none focus:ring-2 focus:ring-ai-violet-500/50 [color-scheme:light] dark:[color-scheme:dark]"
+          className="w-full px-3.5 py-2.5 text-sm rounded-xl border bg-white dark:bg-[#0F172A] border-slate-200 dark:border-[#334155] text-slate-900 dark:text-[#1b71c8] font-mono focus:outline-none focus:ring-2 focus:ring-ai-violet-500/50 [color-scheme:light] dark:[color-scheme:dark]"
         />
         <small className="text-[11px] text-slate-400 mt-1 block">
           Tentukan jam jika ingin dijadwalkan ke depan. Kosongkan jika ini

@@ -1,4 +1,5 @@
 import axios from "axios";
+import { handleAuthExpired } from "../utils/authUtils";
 
 // 1. Buat instance dulu
 const api = axios.create({
@@ -17,17 +18,12 @@ api.interceptors.request.use(
   (error) => Promise.reject(error),
 );
 
-// 3. Pasang interceptor response (JANGAN panggil useAuth() di sini)
+// 3. Pasang interceptor response (auto-kick jika status 401 Unauthorized / Token Expired)
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-
-      if (window.location.pathname !== "/login") {
-        window.location.href = "/login";
-      }
+      handleAuthExpired();
     }
     return Promise.reject(error);
   },

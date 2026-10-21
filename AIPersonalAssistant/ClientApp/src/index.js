@@ -6,6 +6,10 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import * as serviceWorkerRegistration from "./serviceWorkerRegistration";
 import reportWebVitals from "./reportWebVitals";
+import { setupFetchInterceptor } from "./utils/authUtils";
+
+// Inisialisasi global interceptor untuk auto-kick saat token expired (401)
+setupFetchInterceptor();
 
 const baseUrl = document.getElementsByTagName("base")[0].getAttribute("href");
 const rootElement = document.getElementById("root");

@@ -24,7 +24,7 @@
 
 - **Bebas Beban Kognitif:** Pengguna tidak perlu merangkum atau menganalisis seluruh riwayatnya sendiri.
 - **Memori Berkelanjutan:** AI mengingat konteks masa lalu, preferensi pengguna, dan status proyek tanpa kehilangan detail saat terjadi koreksi.
-- **Rekomendasi Nyata:** Menghasilkan benang merah (_observed patterns_) dan penyesuaian ritme (_habit tweaks_) yang realistis dan aplikatif, tanpa jargon teoritis atau analisis menghakimi.
+- **Rekomendasi Nyata:** Menghasilkan benang merah (_observed patterns_) dan penyesuaian ritme (_habit tweaks_) yang realistis dan aplikatif.
 
 ---
 
@@ -41,7 +41,7 @@
 
 ### 2. AI Intelligence Engine (Google Gemini)
 
-- **Model:** Google Gemini API (`gemini-2.5-flash`, `gemini-1.5-flash`, dengan fallback candidate models)
+- **Model:** Google Gemini API (`gemini-3.5-flash-lite`, `gemini-3.5-flash`, dengan fallback candidate models)
 - **Integrasi Canggih:**
   - **Structured JSON Mode:** Enforcing skema JSON murni tanpa artefak markdown wrap.
   - **Function / Tool Calling:** Tool `search_comprehensive_history` untuk pencarian arsip multi-dimensi.
@@ -72,7 +72,6 @@ Dashboard utama di halaman muka (`/`) mengompilasi data aktivitas sepekan dan in
 - **Pola & Dinamika Terdeteksi:** Wawasan benang merah ritme kerja pengguna tanpa asumsi menghakimi.
 - **Penyesuaian Ritme (Atomic Habits):** Saran aksi mikro praktis untuk menjaga konsistensi atau memanfaatkan momentum produktivitas.
 - **Eksplorasi Konsep & Problem Solving:** Rangkuman konsep teknis dan arsitektur yang dieksplorasi pengguna pada sesi Ask AI.
-- **Presisi Tanggal Rekap:** Menampilkan waktu rekap harian terakhir secara presisi (contoh: `Rekap: 01 Okt 2026, 04:00 WIB`).
 
 ### 2. Dual-Output AI Voice Assistant (Traceback Memory)
 
