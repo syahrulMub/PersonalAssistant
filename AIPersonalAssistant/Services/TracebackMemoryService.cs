@@ -57,13 +57,38 @@ public class TracebackMemoryService
             .Take(10)
             .ToListAsync();
 
-        var activeMemories = rawMemories.Select(m => new
+        var activeMemories = rawMemories.Select(m =>
         {
-            m.Key,
-            m.Subject,
-            m.MemoryType,
-            Value = JsonDocument.Parse(m.ValueJson).RootElement
-        });
+            object? parsedValue = null;
+            if (!string.IsNullOrWhiteSpace(m.ValueJson))
+            {
+                try
+                {
+                    parsedValue = JsonNode.Parse(m.ValueJson);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "[TracebackMemoryService] Memory ID {Id} (Key: {Key}, Subject: {Subject}) memiliki ValueJson tidak valid. Raw: {Raw}. Menggunakan fallback sanitasi.", m.Id, m.Key, m.Subject, m.ValueJson);
+                    try
+                    {
+                        var clean = m.ValueJson.Replace("```json", "", StringComparison.OrdinalIgnoreCase).Replace("```", "").Trim();
+                        parsedValue = JsonNode.Parse(clean);
+                    }
+                    catch
+                    {
+                        parsedValue = new { rawContent = m.ValueJson };
+                    }
+                }
+            }
+
+            return new
+            {
+                m.Key,
+                m.Subject,
+                m.MemoryType,
+                Value = parsedValue ?? new { }
+            };
+        }).ToList();
         var activeMemoriesJson = JsonSerializer.Serialize(activeMemories, _jsonOptions);
 
         // 3. Baca Log Aktivitas Terbaru (Ringkasan 6 Terakhir)
@@ -76,8 +101,17 @@ public class TracebackMemoryService
         var recentLogsJson = JsonSerializer.Serialize(recentLogs, _jsonOptions);
 
         // 4. Susun riwayat percakapan sesi ini
-        var historyList = JsonSerializer.Deserialize<List<VoiceTurnItemDto>>(session.ConversationHistoryJson)
+        List<VoiceTurnItemDto> historyList;
+        try
+        {
+            historyList = JsonSerializer.Deserialize<List<VoiceTurnItemDto>>(session.ConversationHistoryJson, _jsonOptions)
                           ?? new List<VoiceTurnItemDto>();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[TracebackMemoryService] Gagal deserialize ConversationHistoryJson untuk sesi {SessionId}. Menggunakan list kosong.", session.Id);
+            historyList = new List<VoiceTurnItemDto>();
+        }
         var sessionHistoryText = string.Join("\n", historyList.Select(h => $"{h.Speaker}: {h.Message}"));
 
         // 5. Rakit Prompt
@@ -229,13 +263,27 @@ public class TracebackMemoryService
         feature: "ApiKeyAskAIAssistant",
         forceJsonResponse: true
         );
-        var aiResult = JsonSerializer.Deserialize<VoiceTurnResponseDto>(aiRawResponse, _jsonOptions)
+        VoiceTurnResponseDto aiResult;
+        try
+        {
+            aiResult = JsonSerializer.Deserialize<VoiceTurnResponseDto>(aiRawResponse, _jsonOptions)
                        ?? new VoiceTurnResponseDto
                        {
                            VoiceSpeechResponse = "Terjadi kendala memproses data.",
                            ReportMarkdown = "",
                            IsFinalTurn = true
                        };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[TracebackMemoryService] Gagal deserialize VoiceTurnResponseDto. Raw response: {Raw}", aiRawResponse);
+            aiResult = new VoiceTurnResponseDto
+            {
+                VoiceSpeechResponse = !string.IsNullOrWhiteSpace(aiRawResponse) ? aiRawResponse : "Maaf, aku mengalami kendala saat merumuskan jawaban.",
+                ReportMarkdown = "",
+                IsFinalTurn = false
+            };
+        }
 
         // 8. Update Riwayat Percakapan (Simpan narasi audio ke history sesi)
         historyList.Add(new VoiceTurnItemDto { Speaker = "User", Message = request.UserSpeechInput });

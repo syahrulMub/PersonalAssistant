@@ -225,7 +225,7 @@ public class AIMemoryService : IAIMemoryService
                         MemoryType = item.MemoryType,
                         Subject = item.Subject,
                         Key = item.Key,
-                        ValueJson = item.ValueJson,
+                        ValueJson = MinifyJson(item.ValueJson),
                         Confidence = Math.Clamp(item.Confidence, 0.0, 1.0),
                         EvidenceCount = item.Evidence.Count,
                         Status = "Active",
@@ -248,7 +248,7 @@ public class AIMemoryService : IAIMemoryService
 
                     if (memoryToUpdate != null)
                     {
-                        memoryToUpdate.ValueJson = item.ValueJson;
+                        memoryToUpdate.ValueJson = MinifyJson(item.ValueJson);
                         memoryToUpdate.Confidence = Math.Clamp(item.Confidence, 0.0, 1.0);
                         memoryToUpdate.EvidenceCount += item.Evidence.Count;
                         memoryToUpdate.LastObservedAt = now;
@@ -267,7 +267,7 @@ public class AIMemoryService : IAIMemoryService
                     if (targetMemory != null)
                     {
                         // A. Update target memori utama dengan nilai gabungan baru
-                        targetMemory.ValueJson = item.ValueJson;
+                        targetMemory.ValueJson = MinifyJson(item.ValueJson);
                         targetMemory.Confidence = Math.Clamp(item.Confidence, 0.0, 1.0);
                         targetMemory.LastObservedAt = now;
                         targetMemory.UpdatedAt = now;
@@ -436,14 +436,26 @@ public class AIMemoryService : IAIMemoryService
     private static string MinifyJson(string? json)
     {
         if (string.IsNullOrWhiteSpace(json)) return "{}";
+
+        var trimmed = json.Trim();
+        if (trimmed.StartsWith("```json", StringComparison.OrdinalIgnoreCase))
+            trimmed = trimmed.Substring(7);
+        else if (trimmed.StartsWith("```"))
+            trimmed = trimmed.Substring(3);
+
+        if (trimmed.EndsWith("```"))
+            trimmed = trimmed.Substring(0, trimmed.Length - 3);
+
+        trimmed = trimmed.Trim();
+
         try
         {
-            using var doc = JsonDocument.Parse(json);
+            using var doc = JsonDocument.Parse(trimmed);
             return JsonSerializer.Serialize(doc.RootElement);
         }
         catch
         {
-            return json.Replace("\r", "").Replace("\n", "").Trim();
+            return JsonSerializer.Serialize(new { rawContent = trimmed });
         }
     }
 }

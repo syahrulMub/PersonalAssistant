@@ -263,10 +263,29 @@ public class ReflectionService
                     memory.UpdatedAt = DateTime.Now;
                 }
 
-                // Perbarui isi data JSON memori
-                memory.ValueJson = memUpdate.Value != null
-                    ? (memUpdate.Value is string textVal ? textVal : JsonSerializer.Serialize(memUpdate.Value))
-                    : "{}";
+                // Perbarui isi data JSON memori (pastikan selalu valid JSON)
+                string cleanValJson = "{}";
+                if (memUpdate.Value != null)
+                {
+                    if (memUpdate.Value is string textVal)
+                    {
+                        var trimmed = textVal.Trim();
+                        try
+                        {
+                            using var doc = JsonDocument.Parse(trimmed);
+                            cleanValJson = JsonSerializer.Serialize(doc.RootElement);
+                        }
+                        catch
+                        {
+                            cleanValJson = JsonSerializer.Serialize(new { note = trimmed });
+                        }
+                    }
+                    else
+                    {
+                        cleanValJson = JsonSerializer.Serialize(memUpdate.Value);
+                    }
+                }
+                memory.ValueJson = cleanValJson;
 
                 // Simpan dulu agar memory.Id ter-generate jika ini entri baru
                 await _dbContext.SaveChangesAsync(ct);
